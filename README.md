@@ -86,6 +86,10 @@ new VM → `provision.sh` → `restore.sh`.
    (sign in as `opencode` + that password), installs the 14 bundled community
    skills into it, and locks the firewall to 22/80/443. Caddy is installed from
    the official pinned binary tarball (checksum-verified), not an apt repo.
+   Also installs the pinned global CLIs `codex` (@openai/codex) and `claude`
+   (@anthropic-ai/claude-code) so every slot user can use them — sign in once
+   inside your slot (web/ttyd or `connect push`) and your tokens stay in your
+   slot's home, never in git.
 
 4. **Add slots for other people** (each gets a separate password/live):
 
@@ -128,7 +132,66 @@ sudo -u cl-alice bash -c 'chown -R cl-alice:cl-alice ~/.ssh'
 What moves: `~/.config/opencode` (config + MCPs + plugin configs + agents),
 `~/.agents/skills` (your skill library), `~/.local/share/opencode` (chat
 history, projects, `auth.json`), `~/.local/state/opencode`. Push overwrites the
-slot's copy; pull backs your local state up first.
+slot's copy; pull backs your local state up first. Codex (`~/.codex`,
+`~/.config/codex`, `~/.local/share/codex`) and Claude Code (`~/.claude`,
+`~/.claude.json`, `~/.config/claude`, `~/.local/share/claude-code`) state moves
+the same way — sign in once per slot (its token stays in the slot's home, never
+in git).
+
+## Your own settings in real time
+
+Out of the box every slot starts from the repo's shared template. If you want
+**your** opencode config — same `opencode.jsonc`, `AGENTS.md`, and `skills/`
+library — to follow you to *every* device the moment you log into a slot, point
+a slot at your own private settings repo with `SETTINGS_REPO`.
+
+> Security note: your settings repo is **private on GitHub** — it may hold your
+> real model provider choices and paths. It must never contain API keys,
+> `auth.json`, or `*.env`. The server clones it *into the slot's home dir* only;
+> nothing is pushed back into your repo, and session tokens stay in the slot.
+
+**Make your settings repo** (one-time, on any PC):
+
+```bash
+# a PRIVATE repo holding exactly what opencode reads from your machine
+git init settings && cd settings
+cp ~/.config/opencode/opencode.jsonc opencode.jsonc   # your real config
+cp ~/.config/opencode/AGENTS.md AGENTS.md             # your behavior rules
+cp -r ~/.agents/skills skills                          # your skills, optional
+printf '**/auth.json\n*.env\n.claude.json\n.codex/auth.json\n' > .gitignore
+gh repo create <your-name>/opencode-defaults --private --source . --push
+```
+
+**Point a slot at it** (`SETTINGS_REPO` is a git URL or a local path on the VM):
+
+```bash
+SETTINGS_REPO='https://github.com/<your-name>/opencode-defaults' \
+  OPENCODE_SERVER_PASSWORD='a-strong-password' ./add-slot.sh <slot>
+```
+
+or bake it into your *own* first slot during provisioning:
+
+```bash
+sudo OPENCODE_SERVER_PASSWORD='a-strong-password' \
+  SETTINGS_REPO='https://github.com/<your-name>/opencode-defaults' \
+  ./provision.sh <your-domain>.<ext>
+```
+
+or apply it to an **existing** slot later (as root):
+
+```bash
+./scripts/seed-settings.sh <slot> https://github.com/<your-name>/opencode-defaults
+```
+
+**Then roam across devices** — any phone/PC that can reach the VM logs into the
+same web slot and sees that configuration: your skills, MCP servers, agents and
+permission guardrails are the same everywhere, in realtime. Edit the repo on
+device *A*, reseed the slot, log in from device *B* — same opencode.
+
+**First-writer-wins** keeps the slot safe: a settings file is applied only if
+the slot doesn't already have one, *or* it still holds the untouched template
+default — it never clobbers a config you've since customized or pulled down via
+`connect`. Skills are merged by name, no-overwrite.
 
 ## Day-to-day
 
@@ -153,8 +216,10 @@ sudo crontab -e   # add:
 - [ ] Firewall = exactly 22/80/443; TLS only via Caddy (Let's Encrypt);
       per-slot brute-force protection = strong unique per-slot passwords
 - [ ] `/etc/opencode/<slot>.env` is root-only 0600; repo has no secrets (CI gate enforced)
-- [ ] `opencode-ai` + Node versions pinned; auto-update disabled server-side
+- [ ] `/etc/opencode/<slot>.env` is root-only 0600; repo has no secrets (CI gate enforced)
+- [ ] `opencode-ai` + Node + `codex` + `claude-code` versions pinned; auto-update disabled server-side
 - [ ] MCP guardrails on: `playwright_browser_run_code_unsafe=deny`, `evaluate=ask`
+- [ ] Codex/Claude tokens live only in the slot's home (0700/0600), never in git
 - [ ] Backups nightly + encrypted off-box sync
 
 See [SECURITY.md](SECURITY.md) and the CI gate in `.github/workflows/security.yml`
@@ -175,6 +240,8 @@ opencode-anywhere/
 |   |-- opencode-connect.ps1   #                      ... (Windows)
 |-- qrcode.sh / backup.sh / restore.sh   # server helpers
 |-- scripts/check.ps1     # security gate (also in CI)
+|-- scripts/smoke.sh      # multi-slot isolation smoke test (also in CI)
+|-- scripts/seed-settings.sh  # reseed an existing slot from a private settings repo
 |-- .github/workflows/security.yml  # gate + multi-slot smoke on every push
 |-- SECURITY.md / LICENSE
 ```

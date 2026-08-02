@@ -30,11 +30,25 @@ CFG="$HOME/.config/opencode"        # config, MCPs, plugin config, agents
 SKILLS="$HOME/.agents/skills"       # global skills (the skills CLI installs here)
 DATA="$HOME/.local/share/opencode"  # chats, projects, auth.json - the state
 STATE="$HOME/.local/state/opencode" # frecency / kv store (optional)
+CODEX_CFG="$HOME/.codex"            # codex config + auth.json (per-slot)
+CODEX_DATA="$HOME/.local/share/codex" # codex sessions/history
+CODEX_XDG="$HOME/.config/codex"     # codex xdg config fallback
+CLAUDE_CFG="$HOME/.claude"          # claude code state/auth
+CLAUDE_JSON="$HOME/.claude.json"    # claude code main config+auth
+CLAUDE_XDG="$HOME/.config/claude"   # claude settings.json template
+CLAUDE_DATA="$HOME/.local/share/claude-code" # claude session .jsonl history
 PAIRS=(
-  "$CFG    :.config/opencode"
-  "$SKILLS :.agents/skills"
-  "$DATA   :.local/share/opencode"
-  "$STATE  :.local/state/opencode"
+  "$CFG         :.config/opencode"
+  "$SKILLS      :.agents/skills"
+  "$DATA        :.local/share/opencode"
+  "$STATE       :.local/state/opencode"
+  "$CODEX_CFG   :.codex"
+  "$CODEX_DATA  :.local/share/codex"
+  "$CODEX_XDG   :.config/codex"
+  "$CLAUDE_CFG  :.claude"
+  "$CLAUDE_JSON :.claude.json"
+  "$CLAUDE_XDG  :.config/claude"
+  "$CLAUDE_DATA :.local/share/claude-code"
 )
 
 if [ "$CMD" = "info" ]; then
@@ -52,17 +66,23 @@ fi
 if [ "$CMD" = "push" ]; then
   for pair in "${PAIRS[@]}"; do
     local_p="$(printf '%s' "${pair%%:*}" | tr -d ' ')"; remote_p="${pair#*:}"
-    [ -d "$local_p" ] || { echo "skip: $local_p does not exist locally"; continue; }
+    [ -e "$local_p" ] || { echo "skip: $local_p does not exist locally"; continue; }
     echo "push $local_p -> $DEST:$remote_p ..."
-    echo "push $local_p -> $DEST:$remote_p ..."
-    # Target dirs are pre-created by add-slot.sh (mkdir here would abort the
-    # batch with "Failure" on an existing dir), so just upload into them.
-    {
-      printf 'cd %s\n' "$remote_p"
-      printf 'lcd %s\n' "$local_p"
-      printf 'put -r .\n'
-    } | sftp "${KEY_ARGS[@]}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -b - "$DEST" >/dev/null \
-      || echo "  WARNING: push for $remote_p had issues"
+    if [ -d "$local_p" ]; then
+      # Target dirs are pre-created by add-slot.sh (mkdir here would abort the
+      # batch with "Failure" on an existing dir), so just upload into them.
+      {
+        printf 'cd %s\n' "$remote_p"
+        printf 'lcd %s\n' "$local_p"
+        printf 'put -r .\n'
+      } | sftp "${KEY_ARGS[@]}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -b - "$DEST" >/dev/null \
+        || echo "  WARNING: push for $remote_p had issues"
+    else
+      # ponytail: a single FILE pair (e.g. ~/.claude.json) - scp it directly,
+      # the remote target is a file path, not a dir.
+      scp "${KEY_ARGS[@]}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new "$local_p" "$DEST:$remote_p" >/dev/null 2>&1 \
+        || echo "  WARNING: push file $remote_p had issues"
+    fi
   done
   echo "push done: slot '$SLOT' now mirrors this machine."
   echo "See it live from any device: https://$SLOT.<your-domain>  (URL shown by add-slot.sh)"
@@ -76,12 +96,19 @@ for pair in "${PAIRS[@]}"; do
   local_p="$(printf '%s' "${pair%%:*}" | tr -d ' ')"; remote_p="${pair#*:}"
   [ -z "$remote_p" ] && continue
   [ -d "$local_p" ] && cp -a "$local_p" "$PULL_BACKUP/$(basename "$local_p")" 2>/dev/null || true
-  mkdir -p "$local_p"
+  # ponytail: some pairs are FILES (e.g. ~/.claude.json), so never mkdir a dir
+  # over an existing file (that would crash under set -e on the same path).
+  [ -e "$local_p" ] || mkdir -p "$local_p"
   echo "pull $DEST:$remote_p -> $local_p"
-  {
-    printf 'cd %s\n' "$remote_p"
-    printf 'lcd %s\n' "$local_p"
-    printf 'get -r *\n'
-  } | sftp "${KEY_ARGS[@]}" -o BatchMode=yes -b - "$DEST" >/dev/null || echo "  WARNING: sftp pull for $remote_p had issues (empty remote dir is fine)"
+  if [ -d "$local_p" ]; then
+    {
+      printf 'cd %s\n' "$remote_p"
+      printf 'lcd %s\n' "$local_p"
+      printf 'get -r *\n'
+    } | sftp "${KEY_ARGS[@]}" -o BatchMode=yes -b - "$DEST" >/dev/null || echo "  WARNING: sftp pull for $remote_p had issues (empty remote dir is fine)"
+  else
+    scp "${KEY_ARGS[@]}" -o BatchMode=yes "$DEST:$remote_p" "$local_p" >/dev/null 2>&1 \
+      || echo "  WARNING: sftp pull file $remote_p had issues (remote missing is fine)"
+  fi
 done
 echo "pull done; previous local state backed up under $PULL_BACKUP"

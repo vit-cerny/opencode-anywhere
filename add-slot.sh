@@ -29,10 +29,17 @@ fi
 BASE_DOMAIN="$(sed -n 's/^DOMAIN=//p' /etc/opencode/slots.conf 2>/dev/null || true)"
 [ -n "$BASE_DOMAIN" ] || { echo "ERROR: run provision.sh first (it writes /etc/opencode/slots.conf)" >&2; exit 1; }
 
+readonly SLOT_LOCK=/etc/opencode/slot-count.lock
 mkdir -p /etc/opencode
+# Atomic port allocation: flock so two concurrent add-slot runs cannot both
+# read the same slot-count and collide on a port.
+exec 9>"$SLOT_LOCK"
+flock 9
 N="$(cat /etc/opencode/slot-count 2>/dev/null || echo 0)"
 PORT=$((41000 + N))
 echo "$((N + 1))" > /etc/opencode/slot-count
+flock -u 9
+exec 9>&-
 
 USER="cl-$SLOT"
 HOME_DIR="/home/$USER"
@@ -41,15 +48,21 @@ DOMAIN="$SLOT.$BASE_DOMAIN"
 # --- Linux user: system user, no login shell (sftp-only via sshd ForceCommand) ---
 id -u "$USER" >/dev/null 2>&1 || useradd --system --create-home --home-dir "$HOME_DIR" --shell /usr/sbin/nologin "$USER"
 
-# --- per-slot service env file (0600 root-only) ---
-( umask 077
-  mkdir -p /etc/opencode
-  printf 'OPENCODE_SERVER_PASSWORD="%s"\n' "$OPENCODE_SERVER_PASSWORD" > "/etc/opencode/$SLOT.env"
-  printf 'OPENCODE_SERVER_USERNAME="%s"\n' "${OPENCODE_SERVER_USERNAME:-opencode}" >> "/etc/opencode/$SLOT.env"
-  # Keep the pinned version from silently self-updating (drift defeats the pin).
-  printf 'OPENCODE_DISABLE_AUTOUPDATE=1\n' >> "/etc/opencode/$SLOT.env"
-  chmod 0600 "/etc/opencode/$SLOT.env"
-)
+# --- per-slot service env file (0600 root-only). Never silently overwrite an
+# existing slot's password (a provision re-run must not clobber a user's
+# credentials); OPENCODE_SLOT_RESET=1 explicitly rotates it. ---
+if [ -f "/etc/opencode/$SLOT.env" ] && [ "${OPENCODE_SLOT_RESET:-0}" != "1" ]; then
+  echo "note: keeping existing password for slot '$SLOT' (OPENCODE_SLOT_RESET=1 to rotate)"
+else
+  ( umask 077
+    mkdir -p /etc/opencode
+    printf 'OPENCODE_SERVER_PASSWORD="%s"\n' "$OPENCODE_SERVER_PASSWORD" > "/etc/opencode/$SLOT.env"
+    printf 'OPENCODE_SERVER_USERNAME="%s"\n' "${OPENCODE_SERVER_USERNAME:-opencode}" >> "/etc/opencode/$SLOT.env"
+    # Keep the pinned version from silently self-updating (drift defeats the pin).
+    printf 'OPENCODE_DISABLE_AUTOUPDATE=1\n' >> "/etc/opencode/$SLOT.env"
+    chmod 0600 "/etc/opencode/$SLOT.env"
+  )
+fi
 
 # --- slot data dirs; config seeded from the shared template (user brings their own) ---
 mkdir -p "$HOME_DIR/.config/opencode" "$HOME_DIR/.agents/skills" "$HOME_DIR/.local/share/opencode"
@@ -57,6 +70,79 @@ if [ -f /etc/opencode/templates/opencode.jsonc ] && [ ! -f "$HOME_DIR/.config/op
   sed "s|{{HOME}}|$HOME_DIR|g" /etc/opencode/templates/opencode.jsonc > "$HOME_DIR/.config/opencode/opencode.jsonc"
   sed "s|{{HOME}}|$HOME_DIR|g" /etc/opencode/templates/AGENTS.md > "$HOME_DIR/AGENTS.md"
 fi
+# --- SETTINGS_REPO: bake the user's OWN settings into the slot (real-time sync).
+# First writer wins: apply a settings file only when the target is missing or is
+# still the just-seeded template default (byte-identical). Never clobber a file
+# a user already customized or pulled down via connect. Skills merge by name,
+# no-clobber. A missing/unreachable repo warns and leaves the template defaults. ---
+if [ -n "${SETTINGS_REPO:-}" ] && command -v git >/dev/null 2>&1; then
+  if git clone --depth 1 "$SETTINGS_REPO" "$HOME_DIR/.settings-src" >/dev/null 2>&1; then
+    # opencode.jsonc -> .config/opencode (replaces a fresh template default; HTML home templated)
+    if [ -f "$HOME_DIR/.settings-src/opencode.jsonc" ] \
+       && { [ ! -f "$HOME_DIR/.config/opencode/opencode.jsonc" ] \
+            || { [ -f /etc/opencode/templates/opencode.jsonc ] \
+                 && cmp -s "$HOME_DIR/.config/opencode/opencode.jsonc" <(sed "s|{{HOME}}|$HOME_DIR|g" /etc/opencode/templates/opencode.jsonc); }; }; then
+      sed "s|{{HOME}}|$HOME_DIR|g" "$HOME_DIR/.settings-src/opencode.jsonc" > "$HOME_DIR/.config/opencode/opencode.jsonc"
+      echo "settings: opencode.jsonc <- SETTINGS_REPO"
+    fi
+    # AGENTS.md -> $HOME/AGENTS.md (same first-writer-wins rule)
+    if [ -f "$HOME_DIR/.settings-src/AGENTS.md" ] \
+       && { [ ! -f "$HOME_DIR/AGENTS.md" ] \
+            || { [ -f /etc/opencode/templates/AGENTS.md ] \
+                 && cmp -s "$HOME_DIR/AGENTS.md" <(sed "s|{{HOME}}|$HOME_DIR|g" /etc/opencode/templates/AGENTS.md); }; }; then
+      sed "s|{{HOME}}|$HOME_DIR|g" "$HOME_DIR/.settings-src/AGENTS.md" > "$HOME_DIR/AGENTS.md"
+      echo "settings: AGENTS.md <- SETTINGS_REPO"
+    fi
+    # skills/ -> ~/.agents/skills, per-name no-clobber
+    if [ -d "$HOME_DIR/.settings-src/skills" ]; then
+      mkdir -p "$HOME_DIR/.agents/skills"
+      shopt -s nullglob
+      for d in "$HOME_DIR/.settings-src/skills"/*/; do
+        n="$(basename "$d")"
+        [ -e "$HOME_DIR/.agents/skills/$n" ] || { cp -R "$d" "$HOME_DIR/.agents/skills/"; echo "settings: skill +$n"; }
+      done
+      chown -R "$USER:$USER" "$HOME_DIR/.agents"
+      shopt -u nullglob
+    fi
+  else
+    echo "WARNING: could not clone SETTINGS_REPO '$SETTINGS_REPO' - using template defaults" >&2
+  fi
+  rm -rf "$HOME_DIR/.settings-src"
+fi
+# --- codex slot seeding: ~/.codex (config + auth.json after the user logs in) ---
+# 0700 on the dir: it holds the slot's codex auth (provider tokens) once used.
+mkdir -p "$HOME_DIR/.codex"
+if [ ! -f "$HOME_DIR/.codex/config.toml" ]; then
+  cat > "$HOME_DIR/.codex/config.toml" <<EOF
+# opencode-anywhere codex slot config. Log in once in this slot (ttyd web or
+# 'connect push' after a local 'codex login') - the token lands in auth.json
+# here (0600). Model + approval policy: uncomment and set your own defaults.
+# model = "gpt-5.1-codex"
+# approval_policy = "untrusted"
+[approval_policy]
+mode = "off"
+EOF
+fi
+chmod 0700 "$HOME_DIR/.codex"
+chown -R "$USER:$USER" "$HOME_DIR/.codex"
+
+# --- claude code slot seeding: ~/.claude, ~/.claude.json ---
+# ~/.claude + ~/.claude.json hold auth/state; settings.json is the user's
+# settings template (0700 on the dirs: they can hold tokens).
+mkdir -p "$HOME_DIR/.claude"
+: > "$HOME_DIR/.claude.json"   # claude code expects this file to exist
+if [ ! -f "$HOME_DIR/.claude/settings.json" ]; then
+  cat > "$HOME_DIR/.claude/settings.json" <<'EOF'
+{
+  "env": {},
+  "permissions": {}
+}
+EOF
+fi
+chmod 0700 "$HOME_DIR/.claude"
+chmod 0600 "$HOME_DIR/.claude.json" "$HOME_DIR/.claude/settings.json"
+chown -R "$USER:$USER" "$HOME_DIR/.claude" "$HOME_DIR/.claude.json"
+
 chown -R "$USER:$USER" "$HOME_DIR"
 
 # --- per-slot systemd unit (template instance) ---

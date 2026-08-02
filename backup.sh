@@ -5,18 +5,23 @@
 #   sudo -u opencode /usr/local/bin/backup.sh
 set -euo pipefail
 
+# The archive holds auth.json (live provider API keys): every file we touch
+# here must stay private to the admin. umask 077 + 0700 dir + 0600 tarball.
+umask 077
 BACKUP_DIR="${BACKUP_DIR:-$HOME/backups}"
 mkdir -p "$BACKUP_DIR"
+chmod 0700 "$BACKUP_DIR"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 TARBALL="$BACKUP_DIR/opencode-$STAMP.tar.gz"
 
 # Backup contents are SENSITIVE: the archive includes ~/.local/share/opencode which
 # holds auth.json (your AI provider API keys). Keep backups on the box is fine (0600
-# home), but if you sync off-box, use an encrypted destination (e.g. `rclone` with a
-# `crypt:` remote) - never a plain object store.
+# home + 0700 backup dir), but if you sync off-box, use an encrypted destination
+# (e.g. `rclone` with a `crypt:` remote) - never a plain object store.
 # Optional off-box sync: BACKUP_RCLONE_REMOTE=rclone-crypt-remote:backups backup.sh
 tar czf "$TARBALL" --ignore-failed-read -C "$HOME" .config/opencode .local/share/opencode
+chmod 0600 "$TARBALL"
 
 # Optional off-box sync (best-effort; the box itself keeps the last 7 regardless).
 if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then

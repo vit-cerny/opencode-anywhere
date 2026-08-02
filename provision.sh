@@ -10,8 +10,14 @@
 # Usage (as root):
 #   sudo OPENCODE_SERVER_PASSWORD='a-strong-password' ./provision.sh yourdomain.duckdns.org
 #   sudo OPENCODE_SERVER_PASSWORD='a-strong-password' ./add-slot.sh alice   (more users)
+#   Optional: SETTINGS_REPO='https://github.com/you/your-opencode-settings' clones a
+#   private settings repo (opencode.jsonc, AGENTS.md, skills/) into each slot so your
+#   config follows you to every device in real time (first-writer-wins over the template).
+#   e.g. SETTINGS_REPO='https://github.com/you/your-settings' sudo OPENCODE_SERVER_PASSWORD='<pw>' ./add-slot.sh alice
+#   or, on an existing slot:  ./scripts/seed-settings.sh alice https://github.com/you/your-settings
 set -euo pipefail
-readonly NODE_VERSION=v24.18.1 OPENCODE_VERSION=1.18.11 PORT=4096
+readonly NODE_VERSION=v24.18.1 OPENCODE_VERSION=1.18.11 PORT=4096 \
+  CODEX_VERSION=0.146.0 CLAUDE_CODE_VERSION=2.1.220
 
 # --- Fail fast: password from env, never from a file in this repo ---
 if [ -z "${OPENCODE_SERVER_PASSWORD:-}" ] || [ "${#OPENCODE_SERVER_PASSWORD}" -lt 12 ]; then
@@ -62,6 +68,24 @@ else
   hash -r
 fi
 
+# --- (b2) OpenAI Codex CLI, pinned (npm) - every slot user can invoke it ---
+if command -v codex >/dev/null 2>&1 && codex --version 2>/dev/null | grep -q "$CODEX_VERSION"; then
+  echo "codex $CODEX_VERSION already installed"
+else
+  echo "installing codex@$CODEX_VERSION (npm, pinned)"
+  npm install -g "@openai/codex@$CODEX_VERSION"
+  hash -r
+fi
+
+# --- (b3) Claude Code CLI, pinned (npm) - every slot user can invoke it ---
+if command -v claude >/dev/null 2>&1 && claude --version 2>/dev/null | grep -q "$CLAUDE_CODE_VERSION"; then
+  echo "claude $CLAUDE_CODE_VERSION already installed"
+else
+  echo "installing @anthropic-ai/claude-code@$CLAUDE_CODE_VERSION (npm, pinned)"
+  npm install -g "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+  hash -r
+fi
+
 # --- (c) slot registries: base domain + shared templates for add-slot.sh ---
 mkdir -p /etc/opencode/templates
 printf 'DOMAIN=%s\n' "$DOMAIN" > /etc/opencode/slots.conf
@@ -87,6 +111,10 @@ else
   hash -r
 fi
 mkdir -p /etc/caddy
+# The service runs as non-root (User=caddy): the dir and file must be
+# world-traversable/readable or Caddy cannot read its own config.
+chmod 0755 /etc/caddy
+umask 022  # explicit: ensure the template write below is 0644, not 0600
 # Global options belong OUTSIDE site blocks (this is a Caddyfile requirement).
 # Only seed the file if absent: add-slot.sh appends vhosts, and re-running
 # provision must never wipe the slots that already exist.
@@ -99,6 +127,14 @@ EOF
   printf '# opencode-anywhere: add-slot.sh appends one <user>.%s { } vhost per user.\n' "$DOMAIN" >> /etc/caddy/Caddyfile
 fi
 # Own the service (the distro's caddy unit may be absent): idempotent unit.
+# Create the dedicated non-root caddy user BEFORE the unit references it
+# (User=caddy), so a Caddy compromise is not a root compromise.
+if ! id -u caddy >/dev/null 2>&1; then
+  mkdir -p /var/lib/caddy
+  useradd --system --home-dir /var/lib/caddy --shell /usr/sbin/nologin caddy
+fi
+mkdir -p /var/lib/caddy
+chown -R caddy:caddy /var/lib/caddy
 systemctl stop caddy >/dev/null 2>&1 || true
 cat > /etc/systemd/system/caddy.service <<'EOF'
 [Unit]
@@ -107,6 +143,8 @@ After=network-online.target
 Wants=network-online.target
 [Service]
 Type=notify
+User=caddy
+Group=caddy
 WorkingDirectory=/var/lib/caddy
 Environment=XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
 ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
@@ -118,14 +156,14 @@ PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/caddy /etc/caddy
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable caddy >/dev/null 2>&1
-# Caddy's own writable data dir (pki/CA store, config). ProtectSystem=strict
-# makes the rest of the FS read-only, so Caddy may only write under this.
-mkdir -p /var/lib/caddy
+# Caddy data dir (pki/CA store, autosave) - owned by its user. ProtectSystem=strict
+# keeps the rest of the FS read-only, so Caddy may only write under this.
 caddy validate --config /etc/caddy/Caddyfile >/dev/null || { echo "ERROR: base Caddyfile failed validation" >&2; exit 1; }
 
 # Wait for the DuckDNS A record to point at this host before Caddy serves
@@ -142,7 +180,7 @@ done
 # --- (e) first slot (owner): your own workspace, same as the single-user flow ---
 FIRST_SLOT="${OPENCODE_SLOT:-me}"
 OPENCODE_SERVER_PASSWORD="$OPENCODE_SERVER_PASSWORD" OPENCODE_SERVER_USERNAME="${OPENCODE_SERVER_USERNAME:-opencode}" \
-  "$SCRIPT_DIR/add-slot.sh" "$FIRST_SLOT"
+  SETTINGS_REPO="${SETTINGS_REPO:-}" "$SCRIPT_DIR/add-slot.sh" "$FIRST_SLOT"
 
 # Install the bundled 14 community skills into the owner slot (best-effort).
 install_skill() {

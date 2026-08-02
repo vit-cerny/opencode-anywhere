@@ -106,7 +106,9 @@ foreach ($slotScript in @('add-slot.sh', 'remove-slot.sh', 'list-slots.sh')) {
   if ($t -notmatch 'set\s+-euo\s+pipefail') { Fail "${slotScript}: missing 'set -euo pipefail'" }
 }
 $addSlot = Get-Content -LiteralPath (Join-Path $repo 'add-slot.sh') -Raw
-foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDATE=1', 'ForceCommand internal-sftp', 'chmod 0600', '--hostname 127.0.0.1', 'caddy validate')) {
+foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDATE=1', 'ForceCommand internal-sftp', 'chmod 0600', '--hostname 127.0.0.1', 'caddy validate',
+                    'mkdir -p "$HOME_DIR/.codex"', '.codex/config.toml', '[approval_policy]', 'mode = "off"', 'chmod 0700 "$HOME_DIR/.codex"',
+                    '"$HOME_DIR/.claude" "$HOME_DIR/.config/claude"', '.claude.json', '.config/claude/settings.json')) {
   if ($addSlot -notmatch [regex]::Escape($must)) { Fail "add-slot.sh: hardening regression - missing '$must'" }
 }
 # 'admin off' is a Caddy GLOBAL option (base Caddyfile seeded by provision.sh
@@ -114,6 +116,16 @@ foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDA
 $provision = Get-Content -LiteralPath (Join-Path $repo 'provision.sh') -Raw
 if ($provision -notmatch [regex]::Escape('admin off')) { Fail "provision.sh: base Caddyfile must set 'admin off' (global)" }
 if ($addSlot -match [regex]::Escape('admin off')) { Fail 'add-slot.sh: "admin off" belongs in the global Caddyfile options, not a per-slot vhost' }
+if ($provision -notmatch '@openai/codex') { Fail "provision.sh: must install codex CLI" }
+if ($provision -notmatch '@anthropic-ai/claude-code') { Fail "provision.sh: must install claude code CLI" }
+
+# ---- 4d. connect client must sync codex + claude state so slots stay whole ---
+foreach ($connect in @('connect/opencode-connect.sh', 'connect/opencode-connect.ps1')) {
+  $c = Get-Content -LiteralPath (Join-Path $repo $connect) -Raw
+  foreach ($must in @('.codex', '.claude', '.local/share/claude-code')) {
+    if ($c -notmatch [regex]::Escape($must)) { Fail "${connect}: missing codex/claude PAIRS entry '$must'" }
+  }
+}
 
 # ---- 4c. Shell scripts must be LF ----
 Get-ChildItem -LiteralPath $repo -Recurse -File -Filter *.sh | ForEach-Object {

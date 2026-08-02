@@ -21,6 +21,12 @@ Indicate severity (the guidance below is a good baseline). No bounty program.
 - Slot users on SSH are sftp-only (`ForceCommand internal-sftp`,
   `PasswordAuthentication no`): their only inbound channel is file transfer for
   the `connect` client. They have no shell on the VM.
+- Codex and Claude Code CLIs are installed globally (npm, pinned) for every
+  slot user. Each user authenticates *inside their own slot* (via the ttyd web
+  terminal or a `connect push` of a locally-logged-in config). Their provider
+  tokens live only in the slot's own home (codex `~/.codex`, claude
+  `~/.claude*` / `~/.config/claude`), never in git — mirroring how opencode's
+  `auth.json` is treated.
 - The VM admin (ubuntu/root) is the trust root for all slots — same as any
   single-tenant host. Slots are isolated *from each other*, not from root.
 
@@ -43,11 +49,15 @@ Indicate severity (the guidance below is a good baseline). No bounty program.
 - `ufw` shows exactly 22/80/443; the Oracle VCN security list must also be 22/80/443.
 - Backups contain `auth.json` (provider keys). Keep them on the box is fine
   (0600 home), off-box must be encrypted (e.g. rclone `crypt:` remote).
+  Codex (`~/.codex`), claude (`~/.claude*`, `~/.config/claude`) and
+  `claude-code` session data within a slot are likewise 0700/0600 and must be
+  treated exactly like opencode's `auth.json`.
 - Rate limiting is a mitigation, not a guarantee.
 
 ## Supply chain
 
-- Pinned versions: Node `v24.18.1`, `opencode-ai@1.18.11`. The scripts are
+- Pinned versions: Node `v24.18.1`, `opencode-ai@1.18.11`, `@openai/codex@0.146.0`,
+  `@anthropic-ai/claude-code@2.1.220`. The scripts are
   idempotent and skip already-correct installs so the pins stay effective.
 - If a pinned dependency is compromised, bump the pin and push — the CI gate
   re-verifies the whole repo on the new commit.

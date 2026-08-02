@@ -23,10 +23,17 @@ if ($env:OPENCODE_CONNECT_KEY) { $KeyArgs = @('-i', $env:OPENCODE_CONNECT_KEY) }
 
 $UProfile = $env:USERPROFILE  # opencode uses XDG-style paths on Windows too
 $Pairs = @(
-  @{ Local = "$UProfile\.config\opencode";      Remote = '.config/opencode' }
-  @{ Local = "$UProfile\.agents\skills";        Remote = '.agents/skills' }
-  @{ Local = "$UProfile\.local\share\opencode"; Remote = '.local/share/opencode' }
-  @{ Local = "$UProfile\.local\state\opencode"; Remote = '.local/state/opencode' }
+  @{ Local = "$UProfile\.config\opencode";             Remote = '.config/opencode' }
+  @{ Local = "$UProfile\.agents\skills";               Remote = '.agents/skills' }
+  @{ Local = "$UProfile\.local\share\opencode";        Remote = '.local/share/opencode' }
+  @{ Local = "$UProfile\.local\state\opencode";        Remote = '.local/state/opencode' }
+  @{ Local = "$UProfile\.codex";                       Remote = '.codex' }
+  @{ Local = "$UProfile\.local\share\codex";           Remote = '.local/share/codex' }
+  @{ Local = "$UProfile\.config\codex";                Remote = '.config/codex' }
+  @{ Local = "$UProfile\.claude";                      Remote = '.claude' }
+  @{ Local = "$UProfile\.claude.json";                 Remote = '.claude.json' }
+  @{ Local = "$UProfile\.config\claude";               Remote = '.config/claude' }
+  @{ Local = "$UProfile\.local\share\claude-code";     Remote = '.local/share/claude-code' }
 )
 
 function Test-SlotAuth {
@@ -50,8 +57,13 @@ if ($Cmd -eq 'push') {
     if (-not (Test-Path $p.Local)) { Write-Host "skip: $($p.Local) does not exist"; continue }
     Write-Host "push $($p.Local) -> $Dest`:$($p.Remote)"
     & ssh @KeyArgs $Dest "mkdir -p '$($p.Remote)'"
-    Get-ChildItem -Force $p.Local | ForEach-Object {
-      & scp @KeyArgs -q -r $_.FullName "$Dest`:$($p.Remote)/"
+    if ((Get-Item $p.Local).PSIsContainer) {
+      Get-ChildItem -Force $p.Local | ForEach-Object {
+        & scp @KeyArgs -q -r $_.FullName "$Dest`:$($p.Remote)/"
+      }
+    } else {
+      # ponytail: file-type pair (e.g. ~/.claude.json) - scp it directly
+      & scp @KeyArgs -q "$p.Local" "$Dest`:$($p.Remote)"
     }
   }
   Write-Host 'push done: slot now mirrors this machine. Open https://<slot>.<your-domain> in any browser.' -ForegroundColor Green
@@ -63,9 +75,18 @@ if ($Cmd -eq 'pull') {
   New-Item -ItemType Directory -Force -Path $Backup | Out-Null
   foreach ($p in $Pairs) {
     if (Test-Path $p.Local) { Copy-Item -Recurse -Force $p.Local "$Backup\$(Split-Path $p.Local -Leaf)" }
+    if ($p.Remote -like '*.claude.json') {
+      # ponytail: single-file pair - scp it directly
+      New-Item -ItemType Directory -Force -Path (Split-Path $p.Local) | Out-Null
+      Write-Host "pull $Dest`:$($p.Remote) -> $($p.Local)"
+      & scp @KeyArgs -q "$Dest`:$($p.Remote)" $p.Local 2>$null
+      if (-not $?) { Write-Host "  WARNING: remote $($p.Remote) missing is fine" }
+      continue
+    }
     New-Item -ItemType Directory -Force -Path $p.Local | Out-Null
     Write-Host "pull $Dest`:$($p.Remote) -> $($p.Local)"
-    & scp @KeyArgs -q -r "$Dest`:$($p.Remote)/*" "$p.Local/"
+    & scp @KeyArgs -q -r "$Dest`:$($p.Remote)/*" "$($p.Local)/" 2>$null
+    if (-not $?) { Write-Host "  WARNING: empty/missing remote $($p.Remote) is fine" }
   }
   Write-Host "pull done; previous local state backed up under $Backup" -ForegroundColor Green
   exit 0

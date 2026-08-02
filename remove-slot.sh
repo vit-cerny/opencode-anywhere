@@ -11,7 +11,9 @@ case "$SLOT" in ''|*[!a-z0-9-]*) echo "ERROR: invalid slot name" >&2; exit 1 ;; 
 
 USER="cl-$SLOT"
 
-systemctl disable --now "opencode-web-$SLOT" >/dev/null 2>&1 || true
+# stop FIRST (a Restart=always unit would otherwise respawn mid-removal)
+systemctl stop "opencode-web-$SLOT" 2>/dev/null || true
+systemctl disable "opencode-web-$SLOT" >/dev/null 2>&1 || true
 rm -f "/etc/systemd/system/opencode-web-$SLOT.service"
 rm -f "/etc/opencode/$SLOT.env"
 systemctl daemon-reload
@@ -23,7 +25,7 @@ if [ -f /etc/caddy/Caddyfile ]; then
     awk -v d="$SLOT.$BASE_DOMAIN" '
       $0 == d { skip=1; next }
       !skip { print }
-      skip && /^ }/ { skip=0 }
+      skip && /^}$/ { skip=0 }
     ' /etc/caddy/Caddyfile > /etc/caddy/Caddyfile.tmp && mv /etc/caddy/Caddyfile.tmp /etc/caddy/Caddyfile
     systemctl reload caddy 2>/dev/null || true
   fi
