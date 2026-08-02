@@ -120,7 +120,8 @@ new VM → `provision.sh` → `restore.sh`.
 4. **Add slots for other people** (each gets a separate password/live):
 
    ```bash
-   cd opencode-anywhere
+   # the one-liner installs the repo at /opt/opencode-anywhere:
+   cd /opt/opencode-anywhere
    OPENCODE_SERVER_PASSWORD='a-strong-password-for-alice' sudo ./add-slot.sh alice
    # → https://alice.yourname.duckdns.org   (also prints its sftp user cl-alice)
    ```

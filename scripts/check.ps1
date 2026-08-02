@@ -53,12 +53,24 @@ try {
   if ($null -eq $cfg.server -or $cfg.server.port -ne 4096 -or $cfg.server.hostname -ne '127.0.0.1') { Fail 'opencode.jsonc: server block must be { port: 4096, hostname: "127.0.0.1" }' }
   if ($cfg.permission.playwright_browser_run_code_unsafe -ne 'deny') { Fail 'opencode.jsonc: playwright_browser_run_code_unsafe must be "deny"' }
   if ($cfg.permission.playwright_browser_evaluate -ne 'ask') { Fail 'opencode.jsonc: playwright_browser_evaluate must be "ask"' }
+  # Any literal value inside an MCP environment block is a potential leak when
+  # this file is shipped as a settings repo - keys must be {env:VAR} placeholders.
+  foreach ($mcpName in @($cfg.mcp.PSObject.Properties.Name)) {
+    $envBlock = $cfg.mcp.$mcpName.environment
+    if ($null -eq $envBlock) { continue }
+    foreach ($k in @($envBlock.PSObject.Properties.Name)) {
+      $v = "$($envBlock.$k)"
+      if ($v -ne '' -and $v -ne 'true' -and $v -ne 'false' -and $v -notmatch '^\{\{?env:') {
+        Fail "opencode.jsonc: MCP '$mcpName' environment '$k' must be an {env:...} placeholder or empty"
+      }
+    }
+  }
 } catch {
   Fail "opencode.jsonc does not parse as JSON: $($_.Exception.Message)"
 }
 
 # ---- 2. Secret sweep: no personal names, key material, or password values ----
-$secretPattern = 'witek|sk-proj-|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA|OPENAI_API_KEY=\S{16,}|BEGIN [A-Z ]*PRIVATE KEY|GITHUB_TOKEN=|GITLAB_TOKEN=|ocid1\.[A-Za-z0-9._-]+:oc1:|[?&]token=[A-Za-z0-9-]{20,}'
+$secretPattern = 'witek|sk-proj-|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA|OPENAI_API_KEY=\S{16,}|BEGIN [A-Z ]*PRIVATE KEY|GITHUB_TOKEN=|GITLAB_TOKEN=|ocid1\.[A-Za-z0-9._-]+:oc1:|[?&]token=[A-Za-z0-9-]{20,}|tvly-[A-Za-z0-9]{20,}|BSA[A-Za-z0-9_]{10,}|AIza[0-9A-Za-z\-_]{20,}|(xox[bap]|xoxr)-[0-9A-Za-z-]{10,}'
 foreach ($file in Get-RepoFiles) {
   $lines = (Get-Content -LiteralPath $file.FullName -Raw) -split "`r?`n"
   for ($i = 0; $i -lt $lines.Count; $i++) {
@@ -76,12 +88,25 @@ foreach ($file in Get-RepoFiles) {
   }
 }
 
-# ---- 2b. Secret sweep: no tracked file may be named auth.json / *.env (a repo
-# clone could hide tokens in those names even when the values pattern misses).
-$envNameHits = Get-ChildItem -LiteralPath $repo -Recurse -File | Where-Object {
-  $_.FullName -notmatch '\\\.git\\' -and $_.Name -imatch '^(auth\.json|.*\.env)$'
+# ---- 2b. Secret sweep: no TRACKED file may be named auth.json / *.env.
+# Only files git actually tracks count: a locally-created, gitignored goto.env
+# (or .env) is a normal part of using the tool and must not fail the gate.
+# Fall back to the whole tree when git is unavailable (e.g. a raw unpack).
+$trackedFiles = @()
+if (Get-Command git -ErrorAction SilentlyContinue) {
+  $trackedRel = & git -C $repo ls-files 2>$null
+  if ($LASTEXITCODE -eq 0) {
+    $trackedFiles = $trackedRel | ForEach-Object { Join-Path $repo $_ }
+  }
 }
-foreach ($hit in $envNameHits) { Fail "secret sweep: forbidden filename tracked: $($hit.FullName)" }
+if ($trackedFiles.Count -eq 0) {
+  $trackedFiles = Get-ChildItem -LiteralPath $repo -Recurse -File | Where-Object { $_.FullName -notmatch '\\\.git\\' }
+}
+$envNameHits = $trackedFiles | Where-Object {
+  (Split-Path $_ -Leaf) -imatch '^(auth\.json|.*\.env)$' -or
+  (Split-Path $_ -Leaf) -ieq 'goto.env'
+}
+foreach ($hit in $envNameHits) { Fail "secret sweep: forbidden filename tracked: $hit" }
 
 # ---- 3. Template hygiene ----
 if ($jsonc -notmatch '\{\{HOME\}\}') { Fail 'opencode.jsonc: {{HOME}} placeholder missing' }

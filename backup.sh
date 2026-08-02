@@ -50,11 +50,26 @@ fi
 chmod 0600 "$TARBALL"
 
 # Optional off-box sync (best-effort; the box itself keeps the last 7 regardless).
+# The archive holds provider keys + slot passwords: only allow destinations we
+# can prove are encrypted (an rclone remote of type `crypt`), never a plain
+# object store. Local dirs (./x, /x) are fine - no transport.
 if [ -n "${BACKUP_RCLONE_REMOTE:-}" ]; then
-  if command -v rclone >/dev/null 2>&1; then
-    rclone copy "$TARBALL" "$BACKUP_RCLONE_REMOTE" && echo "synced off-box: $BACKUP_RCLONE_REMOTE"
-  else
-    echo "WARNING: BACKUP_RCLONE_REMOTE set but rclone is not installed; skipping off-box sync" >&2
+  case "$BACKUP_RCLONE_REMOTE" in
+    /*|./*) ;;  # local path: no transport, fine
+    *:*) REMOTE_NAME="${BACKUP_RCLONE_REMOTE%%:*}";;
+    *) echo "ERROR: BACKUP_RCLONE_REMOTE must be rclone-remote:path or a local dir" >&2; exit 1 ;;
+  esac
+  if [ -n "${REMOTE_NAME:-}" ]; then
+    if command -v rclone >/dev/null 2>&1; then
+      TYPE="$(rclone config show "$REMOTE_NAME" 2>/dev/null | grep -oE '^\s*type\s*=\s*\S+' | head -1 | awk '{print $3}')"
+      if [ "$TYPE" != "crypt" ]; then
+        echo "ERROR: BACKUP_RCLONE_REMOTE remote '$REMOTE_NAME' has type '$TYPE', not 'crypt' - backups hold API keys + slot passwords; refusing" >&2
+        exit 1
+      fi
+      rclone copy "$TARBALL" "$BACKUP_RCLONE_REMOTE" && echo "synced off-box: $BACKUP_RCLONE_REMOTE"
+    else
+      echo "WARNING: BACKUP_RCLONE_REMOTE set but rclone is not installed; skipping off-box sync" >&2
+    fi
   fi
 fi
 

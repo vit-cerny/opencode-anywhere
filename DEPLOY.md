@@ -77,7 +77,7 @@ Add a slot for each person. Each one gets their **own password**, own subdomain,
 and isolated files:
 
 ```bash
-cd opencode-anywhere
+cd /opt/opencode-anywhere   # where the one-liner installer put the repo
 OPENCODE_SERVER_PASSWORD='<their-own-strong-pw>' ./add-slot.sh <name>
 # → https://<name>.<sub>.duckdns.org   (login as "opencode" + that password)
 ```

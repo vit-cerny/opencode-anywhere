@@ -33,7 +33,9 @@ Time target: ~20-30 min once your account is approved (instant usually).
 13. Under **Instance shape**: **Change shape** → **Specialty and legacy** tab →
     **Arm** → **VM.Standard.A1.Flex**; set **OCPU count: 2**, **Memory: 12 GB** →
     (if OCPU locked to 1 or greyed out, raise count on the slider) → **Select shape**.
-    Note: in some regions A1 temporarily reports **Out of host capacity** — press
+    Note: 2 OCPU/12 GB is now the **Always Free ceiling** (Oracle halved it in
+    2026; it's pooled across all A1 instances in your account, not per-VM). In
+    some regions A1 temporarily reports **Out of host capacity** — press
     **Retry** after refresh, or pick the free AMD `VM.Standard.E2.1.Micro` instead.
 14. **SSH keys**: click **Paste public keys** and paste the **public** key you
     generated locally (`cat ~/.ssh/id_ed25519.pub` on your PC). You keep the
@@ -44,10 +46,12 @@ Time target: ~20-30 min once your account is approved (instant usually).
 ## 3 — Make the IP permanent
 
 17. Wait ~1-2 min until **Running** (green dot) → note the **Public IP** shown.
-18. Menu **(≡) → Networking → Reserved public IPs → Create / assign**:
+18. Menu **(≡) → Networking → IP management → Reserved public IPs** (renamed in
+    2025; previously under Networking directly) → **Create / assign**:
     - Click **Create** (Pool: **Public**, name: `opencode-ip`).
     - After it's reserved, open the reserved IP row → **Assign** → select your VM
-      instance → **Update**.
+      instance → **Update**. (Reserved IPs are free and survive instance
+      termination — the only way to keep the DuckDNS A record stable.)
 
 ## 4 — Open ports 22/80/443 (the "second firewall")
 
@@ -112,7 +116,9 @@ the `connect` push/pull for syncing a local opencode install into a slot
 ## Phase 9 — crash-proof (done once)
 
 26. `sudo crontab -e` → add backup line (create ~/backups first):
-    `0 * * * * root /usr/local/bin/backup.sh >/dev/null 2>&1` (hourly backup).
+    `0 */6 * * * sudo -u cl-me /usr/local/bin/backup.sh >/dev/null 2>&1`
+    (every 6h; root form — `sudo /usr/local/bin/backup.sh` — also covers every
+    slot's system files. Pick one.)
 
 ## If the IP changes later
 
