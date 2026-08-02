@@ -18,6 +18,31 @@ from any PC or phone. Zero cost, permanent host, no PC left on.**
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Security gate](https://github.com/vit-cerny/opencode-anywhere/actions/workflows/security.yml/badge.svg)](https://github.com/vit-cerny/opencode-anywhere/actions/workflows/security.yml)
 
+## From any machine in 3 commands (adopt)
+
+Got a brand-new PC, laptop, or a friend's machine? Take your **whole server**
+with you using one tiny pointer file. It stores only your VM's IP and your slot
+name — no passwords, keys, or tokens.
+
+1. **Grab the repo:**
+   ```bash
+   git clone https://github.com/vit-cerny/opencode-anywhere.git && cd opencode-anywhere
+   ```
+2. **Create `sync/goto.env` once** (copy the example, fill in `VM_IP` and `SLOT`):
+   ```bash
+   cp sync/goto.env.example sync/goto.env
+   # then edit:  VM_IP=<your vm ip>   SLOT=me
+   ```
+3. **Adopt your whole server onto this machine:**
+   ```bash
+   bash sync/adopt.sh         # Linux/macOS   → pulls slot down to this PC
+   pwsh -File sync/adopt-windows.ps1          # Windows
+   ```
+
+That's it — your config, skills, plugins, MCPs, projects and chats land here.
+Re-run any time to refresh, or `bash sync/adopt.sh push` to send this PC's state
+up instead. Full plain-English walkthrough: **[docs/GOTO.md](docs/GOTO.md)**.
+
 ## How it works
 
 ```
