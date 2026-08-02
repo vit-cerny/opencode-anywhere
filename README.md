@@ -84,7 +84,8 @@ new VM → `provision.sh` → `restore.sh`.
 
    This creates your first slot, **`me`**, at `https://me.yourname.duckdns.org`
    (sign in as `opencode` + that password), installs the 14 bundled community
-   skills into it, and locks the firewall to 22/80/443.
+   skills into it, and locks the firewall to 22/80/443. Caddy is installed from
+   the official pinned binary tarball (checksum-verified), not an apt repo.
 
 4. **Add slots for other people** (each gets a separate password/live):
 
@@ -149,7 +150,8 @@ sudo crontab -e   # add:
 - [ ] Every slot has its own password (min 12 chars, enforced) and its own subdomain
 - [ ] Slot users are `sftp-only` with `ForceCommand internal-sftp`, no passwords SSH
 - [ ] opencode binds loopback only; only Caddy (TLS) is exposed
-- [ ] Firewall = exactly 22/80/443; Caddy rate-limits each vhost (20/min/IP)
+- [ ] Firewall = exactly 22/80/443; TLS only via Caddy (Let's Encrypt);
+      per-slot brute-force protection = strong unique per-slot passwords
 - [ ] `/etc/opencode/<slot>.env` is root-only 0600; repo has no secrets (CI gate enforced)
 - [ ] `opencode-ai` + Node versions pinned; auto-update disabled server-side
 - [ ] MCP guardrails on: `playwright_browser_run_code_unsafe=deny`, `evaluate=ask`

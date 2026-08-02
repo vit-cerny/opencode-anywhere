@@ -13,9 +13,11 @@ Indicate severity (the guidance below is a good baseline). No bounty program.
 - Each slot is an isolated Linux user with its own home dirs, own environment
   file (password), own systemd unit and own Caddy vhost. Slots share nothing.
 - The web auth for each slot is opencode's own basic auth over TLS
-  (`OPENCODE_SERVER_PASSWORD`, enforced by `OPENCODE_SERVER_PASSWORD` server
-  internally: 401 without login). Caddy does not see passwords; it rate-limits
-  (20 req/min/IP per vhost) against brute force.
+  (`OPENCODE_SERVER_PASSWORD`, enforced by the opencode server itself:
+  401 without login). Caddy only terminates TLS and reverse-proxies; it never
+  sees slot passwords. (Site-level rate limiting is available if you compile
+  Caddy with the `caddy-ratelimit` module — not included in the official
+  binary, so brute-force protection rests on strong per-slot passwords.)
 - Slot users on SSH are sftp-only (`ForceCommand internal-sftp`,
   `PasswordAuthentication no`): their only inbound channel is file transfer for
   the `connect` client. They have no shell on the VM.
@@ -28,8 +30,8 @@ Indicate severity (the guidance below is a good baseline). No bounty program.
   personal names, API-key patterns, `OPENCODE_SERVER_PASSWORD` literal values,
   private keys, OCI resource IDs are all scanned).
 - No `curl | sh` / `iwr | iex` installers: Node tarball from nodejs.org,
-  `opencode-ai` pinned via npm, Caddy from its signed apt repo (key pinned via
-  `gpg --dearmor`).
+  `opencode-ai` pinned via npm, Caddy from its official pinned binary tarball
+  (GitHub releases, version-pinned, verified against the upstream checksums file).
 - No password SSH on the VM (`PasswordAuthentication no`, `PermitRootLogin no`).
 - opencode binds loopback only; only Caddy (TLS) is exposed.
 

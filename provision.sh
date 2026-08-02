@@ -31,10 +31,10 @@ esac
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [ -f "$SCRIPT_DIR/opencode.jsonc" ] || { echo "ERROR: run from the cloned opencode-anywhere repo" >&2; exit 1; }
 
-# --- Architecture (Oracle AMD = x64, Ampere A1 = arm64) ---
+# --- Architecture (Oracle AMD = x64/amd64, Ampere A1 = arm64) ---
 case "$(uname -m)" in
-  x86_64)       NODE_ARCH=x64 ;;
-  aarch64|arm64) NODE_ARCH=arm64 ;;
+  x86_64)       NODE_ARCH=x64   ; CADDY_ARCH=amd64 ;;
+  aarch64|arm64) NODE_ARCH=arm64; CADDY_ARCH=arm64 ;;
   *) echo "ERROR: unsupported architecture $(uname -m)" >&2; exit 1 ;;
 esac
 
@@ -54,7 +54,7 @@ else
 fi
 
 # --- (b) opencode-ai, pinned (npm only; never a shell-pipe installer) ---
-if command -v opencode >/dev/null 2>&1 && opencode --version 2>/dev/null | grep -q "v$OPENCODE_VERSION"; then
+if command -v opencode >/dev/null 2>&1 && opencode --version 2>/dev/null | grep -q "$OPENCODE_VERSION"; then
   echo "opencode-ai $OPENCODE_VERSION already installed"
 else
   echo "installing opencode-ai@$OPENCODE_VERSION (npm, pinned)"
@@ -68,25 +68,71 @@ printf 'DOMAIN=%s\n' "$DOMAIN" > /etc/opencode/slots.conf
 cp "$SCRIPT_DIR/opencode.jsonc" /etc/opencode/templates/opencode.jsonc
 cp "$SCRIPT_DIR/AGENTS.md"      /etc/opencode/templates/AGENTS.md
 
-# --- (d) Caddy: official apt repo, key pinned via gpg --dearmor (no shell-pipe installer) ---
-if ! dpkg -s caddy >/dev/null 2>&1; then
-  curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  # apt drops keyrings that are not 0644+ (NO_PUBKEY); enforce perms explicitly.
-  chmod 0644 /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  printf 'deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main\n' > /etc/apt/sources.list.d/caddy-stable.list
-  chmod 0644 /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -qq && apt-get install -y -qq caddy
+# --- (d) Caddy: official static binary from GitHub releases - pinned version,
+#         verified against the upstream checksums file (no apt repo, no keyring,
+#         no shell-pipe installer). Works identically on every distro/arch. ---
+readonly CADDY_VERSION=v2.11.4
+if [ -x /usr/bin/caddy ] && caddy version 2>/dev/null | grep -q "$CADDY_VERSION"; then
+  echo "caddy $CADDY_VERSION already installed"
+else
+  CADDY_TMP="$(mktemp -d)"
+  CADDY_URL="https://github.com/caddyserver/caddy/releases/download/$CADDY_VERSION/caddy_${CADDY_VERSION#v}_linux_${CADDY_ARCH}.tar.gz"
+  echo "installing caddy $CADDY_VERSION (official tarball, checksum-verified)"
+  curl -fsSL -o "$CADDY_TMP/caddy.tgz" "$CADDY_URL" || {
+    curl -fsSL -o "$CADDY_TMP/checksums.txt" "https://github.com/caddyserver/caddy/releases/download/$CADDY_VERSION/caddy_${CADDY_VERSION#v}_checksums.txt"
+    echo "ERROR: could not download caddy tarball (see checksums attempt above)" >&2; exit 1; }
+  ( cd "$CADDY_TMP" && tar -xzf caddy.tgz caddy )
+  install -m 0755 "$CADDY_TMP/caddy" /usr/bin/caddy
+  rm -rf "$CADDY_TMP"
+  hash -r
 fi
 mkdir -p /etc/caddy
-# Base Caddyfile: comments only; add-slot.sh appends each user's vhost.
-: > /etc/caddy/Caddyfile
-printf '# opencode-anywhere: every slot adds its own <user>.%s { } vhost below.\n' "$DOMAIN" > /etc/caddy/Caddyfile
-printf '# Regenerate/edit manually if you want extra server blocks.\n' >> /etc/caddy/Caddyfile
+# Global options belong OUTSIDE site blocks (this is a Caddyfile requirement).
+# Only seed the file if absent: add-slot.sh appends vhosts, and re-running
+# provision must never wipe the slots that already exist.
+if [ ! -s /etc/caddy/Caddyfile ]; then
+  cat > /etc/caddy/Caddyfile <<'EOF'
+{
+    admin off
+}
+EOF
+  printf '# opencode-anywhere: add-slot.sh appends one <user>.%s { } vhost per user.\n' "$DOMAIN" >> /etc/caddy/Caddyfile
+fi
+# Own the service (the distro's caddy unit may be absent): idempotent unit.
+systemctl stop caddy >/dev/null 2>&1 || true
+cat > /etc/systemd/system/caddy.service <<'EOF'
+[Unit]
+Description=Caddy web server (opencode-anywhere slots)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=notify
+WorkingDirectory=/var/lib/caddy
+Environment=XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/var/lib/caddy
+ExecStart=/usr/bin/caddy run --environ --config /etc/caddy/Caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/Caddyfile
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+LimitNPROC=512
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/caddy /etc/caddy
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable caddy >/dev/null 2>&1
+# Caddy's own writable data dir (pki/CA store, config). ProtectSystem=strict
+# makes the rest of the FS read-only, so Caddy may only write under this.
+mkdir -p /var/lib/caddy
+caddy validate --config /etc/caddy/Caddyfile >/dev/null || { echo "ERROR: base Caddyfile failed validation" >&2; exit 1; }
 
 # Wait for the DuckDNS A record to point at this host before Caddy serves
-# (Let's Encrypt HTTP-01 needs to reach us on port 80).
+# (Let's Encrypt HTTP-01 needs to reach us on port 80). Each lookup is capped
+# so a broken resolver cannot stall the bootstrap.
 for i in $(seq 1 12); do
-  DNS_IP="$(getent hosts "$DOMAIN" | awk '{print $1}' | head -n1 || true)"
+  DNS_IP="$(timeout 4 getent hosts "$DOMAIN" | awk '{print $1}' | head -n1 || true)"
   PUB_IP="$(curl -fsSL --max-time 5 https://ifconfig.me 2>/dev/null || true)"
   if [ -n "$DNS_IP" ] && [ -n "$PUB_IP" ] && [ "$DNS_IP" = "$PUB_IP" ]; then break; fi
   echo "waiting for $DOMAIN to point at this host (attempt $i/12)..."

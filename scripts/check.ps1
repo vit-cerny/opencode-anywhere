@@ -106,9 +106,14 @@ foreach ($slotScript in @('add-slot.sh', 'remove-slot.sh', 'list-slots.sh')) {
   if ($t -notmatch 'set\s+-euo\s+pipefail') { Fail "${slotScript}: missing 'set -euo pipefail'" }
 }
 $addSlot = Get-Content -LiteralPath (Join-Path $repo 'add-slot.sh') -Raw
-foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDATE=1', 'ForceCommand internal-sftp', 'chmod 0600', '--hostname 127.0.0.1', 'admin off', 'rate_limit', 'caddy validate')) {
+foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDATE=1', 'ForceCommand internal-sftp', 'chmod 0600', '--hostname 127.0.0.1', 'caddy validate')) {
   if ($addSlot -notmatch [regex]::Escape($must)) { Fail "add-slot.sh: hardening regression - missing '$must'" }
 }
+# 'admin off' is a Caddy GLOBAL option (base Caddyfile seeded by provision.sh
+# only when absent) — add-slot appends proxy-only vhosts and must NOT re-add it.
+$provision = Get-Content -LiteralPath (Join-Path $repo 'provision.sh') -Raw
+if ($provision -notmatch [regex]::Escape('admin off')) { Fail "provision.sh: base Caddyfile must set 'admin off' (global)" }
+if ($addSlot -match [regex]::Escape('admin off')) { Fail 'add-slot.sh: "admin off" belongs in the global Caddyfile options, not a per-slot vhost' }
 
 # ---- 4c. Shell scripts must be LF ----
 Get-ChildItem -LiteralPath $repo -Recurse -File -Filter *.sh | ForEach-Object {

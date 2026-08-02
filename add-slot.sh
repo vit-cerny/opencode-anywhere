@@ -86,24 +86,25 @@ systemctl daemon-reload
 systemctl enable "opencode-web-$SLOT" >/dev/null 2>&1
 systemctl restart "opencode-web-$SLOT" || echo "WARNING: slot $SLOT failed to start; see 'journalctl -u opencode-web-$SLOT -n 50'"
 
-# --- Caddy vhost: <slot>.<base> -> 127.0.0.1:<port> (+ rate limit; auth handled by opencode) ---
+# --- Caddy vhost: <slot>.<base> -> 127.0.0.1:<port> (auth enforced by opencode) ---
+# Idempotent: drop any existing block for this domain first (stale/failed runs
+# must not accumulate duplicate vhosts), then append a clean proxy-only block.
+awk -v dom="$DOMAIN" '
+  $0 == dom" {" { skip=1; next }
+  skip && $0 == "}" { skip=0; next }
+  skip { next }
+  { print }
+' /etc/caddy/Caddyfile > /etc/caddy/Caddyfile.new && mv /etc/caddy/Caddyfile.new /etc/caddy/Caddyfile
 cat >> /etc/caddy/Caddyfile <<EOF
 $DOMAIN {
-    admin off
-    rate_limit {
-        zone dynamic {
-            key {remote_host}
-            events 20
-            window 1m
-        }
-    }
     reverse_proxy 127.0.0.1:$PORT
 }
 EOF
 caddy validate --config /etc/caddy/Caddyfile >/dev/null || { echo "ERROR: Caddyfile failed validation for slot $SLOT" >&2; exit 1; }
-systemctl reload caddy || systemctl restart caddy
+systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
 # --- sshd: this user is sftp-only (the connect client's data path) ---
+mkdir -p /etc/ssh/sshd_config.d
 cat >> /etc/ssh/sshd_config.d/99-opencode-slots.conf <<EOF
 
 Match User $USER

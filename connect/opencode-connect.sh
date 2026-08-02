@@ -40,7 +40,7 @@ PAIRS=(
 if [ "$CMD" = "info" ]; then
   echo "local  ->  slot '$SLOT' on $HOST (user $USER, sftp-only)"
   for pair in "${PAIRS[@]}"; do printf '  %-30s ->  ~%s\n' "${pair%%:*}" "${pair#*:}"; done
-  if ssh "${KEY_ARGS[@]}" "${SSH_OPTS[@]}" "$DEST" true 2>/dev/null; then
+  if printf 'pwd\n' | sftp "${KEY_ARGS[@]}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -b - "$DEST" >/dev/null 2>&1; then
     echo "OK - key auth to $DEST works"
   else
     echo "FAILED - ask the VM admin to add your ssh public key for user $USER" >&2
@@ -51,11 +51,18 @@ fi
 
 if [ "$CMD" = "push" ]; then
   for pair in "${PAIRS[@]}"; do
-    local_p="${pair%%:*}"; remote_p="${pair#*:}"
+    local_p="$(printf '%s' "${pair%%:*}" | tr -d ' ')"; remote_p="${pair#*:}"
     [ -d "$local_p" ] || { echo "skip: $local_p does not exist locally"; continue; }
     echo "push $local_p -> $DEST:$remote_p ..."
-    ssh "${KEY_ARGS[@]}" "$DEST" "mkdir -p '$remote_p'"
-    scp "${KEY_ARGS[@]}" -q -r "$local_p/." "$DEST:$remote_p/"
+    echo "push $local_p -> $DEST:$remote_p ..."
+    # Target dirs are pre-created by add-slot.sh (mkdir here would abort the
+    # batch with "Failure" on an existing dir), so just upload into them.
+    {
+      printf 'cd %s\n' "$remote_p"
+      printf 'lcd %s\n' "$local_p"
+      printf 'put -r .\n'
+    } | sftp "${KEY_ARGS[@]}" -o BatchMode=yes -o StrictHostKeyChecking=accept-new -b - "$DEST" >/dev/null \
+      || echo "  WARNING: push for $remote_p had issues"
   done
   echo "push done: slot '$SLOT' now mirrors this machine."
   echo "See it live from any device: https://$SLOT.<your-domain>  (URL shown by add-slot.sh)"
@@ -66,7 +73,7 @@ fi
 PULL_BACKUP="$HOME/opencode-connect-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$PULL_BACKUP"
 for pair in "${PAIRS[@]}"; do
-  local_p="${pair%%:*}"; remote_p="${pair#*:}"
+  local_p="$(printf '%s' "${pair%%:*}" | tr -d ' ')"; remote_p="${pair#*:}"
   [ -z "$remote_p" ] && continue
   [ -d "$local_p" ] && cp -a "$local_p" "$PULL_BACKUP/$(basename "$local_p")" 2>/dev/null || true
   mkdir -p "$local_p"
