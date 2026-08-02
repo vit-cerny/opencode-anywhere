@@ -90,7 +90,26 @@ optionally your settings repo. The script runs the full `provision.sh`
 25. Sanity: `./list-slots.sh` (shows me slot + URL); add a friend:
     `OPENCODE_SERVER_PASSWORD='<their-pw>' ./add-slot.sh alice`.
 
-## Phase 8 — crash-proof (done once)
+## Step 8 — any device?
+
+One line that matters a lot: this is a normal **public HTTPS site**, so
+*any* device with a browser can use it — no apps, no VPN:
+
+- Phone (4G/5G, Wi-Fi): open the same URL in mobile browser → desktop UI
+  compresses to a touch layout; sign in works
+- Tablet / laptop / any OS (Windows, macOS, Android, iPadOS): same URL
+  (padlock + login prompt; nothing to install)
+- The web UI is **realtime** — edits in one browser show up on every other
+  browser connected to the same slot immediately.
+- If a device won't load: it's NOT a device problem. Check ① DuckDNS A
+  record still points at the reserved IP, ② VCN ingress rules include
+  80/443, ③ `sudo systemctl status caddy` is green.
+
+No configuration per device — the only device-specific thing is optional:
+the `connect` push/pull for syncing a local opencode install into a slot
+(see DEPLOY.md §4). Pure browser use = works everywhere as-is.
+
+## Phase 9 — crash-proof (done once)
 
 26. `sudo crontab -e` → add backup line (create ~/backups first):
     `0 * * * * root /usr/local/bin/backup.sh >/dev/null 2>&1` (hourly backup).
