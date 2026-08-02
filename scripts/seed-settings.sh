@@ -27,7 +27,16 @@ if ! command -v git >/dev/null 2>&1; then
   echo "ERROR: 'git' not installed; install it to seed settings" >&2; exit 1
 fi
 
-if git clone --depth 1 "$SETTINGS_REPO" "$HOME_DIR/.settings-src" >/dev/null 2>&1; then
+# Security: SETTINGS_REPO is an attack surface - only github URLs or plain
+# local paths; reject '-'-prefixed (option injection), whitespace/metachars, or
+# exotic schemes. Symlinks in the repo are deleted: they could point outside the
+# slot home.
+case "$SETTINGS_REPO" in
+  https://github.com/*|git@github.com:*|/*|~/*) ;;
+  *) echo "ERROR: SETTINGS_REPO '$SETTINGS_REPO' rejected (allow: https://github.com/.., git@github.com:.., or absolute path)" >&2; exit 1 ;;
+esac
+if git clone --depth 1 -- "$SETTINGS_REPO" "$HOME_DIR/.settings-src" >/dev/null 2>&1; then
+  find "$HOME_DIR/.settings-src" -type l -delete   # no symlink escapes
   # opencode.jsonc (first writer wins over a fresh template default)
   if [ -f "$HOME_DIR/.settings-src/opencode.jsonc" ] \
      && { [ ! -f "$HOME_DIR/.config/opencode/opencode.jsonc" ] \

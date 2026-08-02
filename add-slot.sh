@@ -74,9 +74,19 @@ fi
 # First writer wins: apply a settings file only when the target is missing or is
 # still the just-seeded template default (byte-identical). Never clobber a file
 # a user already customized or pulled down via connect. Skills merge by name,
-# no-clobber. A missing/unreachable repo warns and leaves the template defaults. ---
+# no-clobber. A missing/unreachable repo warns and leaves the template defaults.
+# Security: the value is an ATTACK SURFACE - accept only github URLs or plain
+# local paths; reject anything that starts with '-' (option injection), contains
+# spaces/shell metachars, or uses an exotic scheme (file:// etc).
+# Also: git copies symlinks verbatim; a repo containing a link to /etc/... would
+# let the slot read/write outside its home, so we delete symlinks after clone. ---
 if [ -n "${SETTINGS_REPO:-}" ] && command -v git >/dev/null 2>&1; then
-  if git clone --depth 1 "$SETTINGS_REPO" "$HOME_DIR/.settings-src" >/dev/null 2>&1; then
+  case "$SETTINGS_REPO" in
+    https://github.com/*|git@github.com:*|/*|~/*) ;;
+    *) echo "WARNING: SETTINGS_REPO '$SETTINGS_REPO' rejected (allow: https://github.com/.., git@github.com:.., or an absolute path) - using template defaults" >&2; SETTINGS_REPO= ;;
+  esac
+  if [ -n "$SETTINGS_REPO" ] && git clone --depth 1 -- "$SETTINGS_REPO" "$HOME_DIR/.settings-src" >/dev/null 2>&1; then
+    find "$HOME_DIR/.settings-src" -type l -delete   # no symlink escapes
     # opencode.jsonc -> .config/opencode (replaces a fresh template default; HTML home templated)
     if [ -f "$HOME_DIR/.settings-src/opencode.jsonc" ] \
        && { [ ! -f "$HOME_DIR/.config/opencode/opencode.jsonc" ] \
