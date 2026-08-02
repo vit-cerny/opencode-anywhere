@@ -1,0 +1,66 @@
+name: opencode-anywhere security gate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run security gate
+        run: pwsh -File scripts/check.ps1
+
+  # Anti-fooling smoke test - multi-slot: boot TWO independent opencode web
+  # servers from the repo's real template config, prove each enforces auth
+  # (401 without / 200 with) and that each serves its OWN slot config.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned opencode-ai and assert version
+        run: |
+          V="$(grep -oP 'OPENCODE_VERSION=\K[0-9.]+' provision.sh)"
+          npm install -g "opencode-ai@$V"
+          test "$(opencode --version | tr -d '[:space:]')" = "$V" || { echo "version mismatch: expected $V"; exit 1; }
+      - name: Boot two isolated slots and prove auth + per-slot isolation
+        run: |
+          # slot "me" on 4199, slot "alice" on 4299 - different homes, different passwords
+          P1="ci-pw-me-$(openssl rand -hex 6)"
+          P2="ci-pw-alice-$(openssl rand -hex 6)"
+          for spec in "me:$P1:4199" "alice:$P2:4299"; do
+            S="${spec%%:*}"; REST="${spec#*:}"; P="${REST%%:*}"; PORT="${REST##*:}"
+            export HOME="/tmp/oc-slot-$S"
+            mkdir -p "$HOME/.config/opencode"
+            sed "s|{{HOME}}|$HOME|g" opencode.jsonc > "$HOME/.config/opencode/opencode.jsonc"
+            printf 'marker-%s\n' "$S" >> "$HOME/.config/opencode/slot-marker.txt"
+            export OPENCODE_SERVER_PASSWORD="$P"
+            opencode web --port "$PORT" --hostname 127.0.0.1 > "/tmp/oc-web-$S.log" 2>&1 &
+          done
+          sleep 20
+          for spec in "me:4199" "alice:4299"; do
+            S="${spec%%:*}"; PORT="${spec##*:}"
+            for i in $(seq 1 30); do curl -sf -o /dev/null "http://127.0.0.1:$PORT/" && break; sleep 1; done
+          done
+          fail=0
+          for pair in "me:$P1:4199" "alice:$P2:4299"; do
+            S="${pair%%:*}"; REST="${pair#*:}"; P="${REST%%:*}"; PORT="${REST##*:}"
+            N="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/")"
+            A="$(curl -s -o /dev/null -w '%{http_code}' -u "opencode:$P" "http://127.0.0.1:$PORT/")"
+            E="$(curl -s -o /dev/null -w '%{http_code}' -u "opencode:$P" "http://127.0.0.1:$PORT/global/event")"
+            echo "slot=$S noauth=$N auth=$A sse=$E"
+            test "$N" = "401" || { echo "expected 401 without auth for $S"; fail=1; }
+            test "$A" = "200" || { echo "expected 200 with auth for $S"; fail=1; }
+            test "$E" = "200" || { echo "expected 200 on /global/event for $S"; fail=1; }
+          done
+          # prove isolation: wrong password for the OTHER slot must fail
+          CROSS="$(curl -s -o /dev/null -w '%{http_code}' -u "opencode:$P2" "http://127.0.0.1:4199/")"
+          echo "cross-slot auth with alice password on me slot: $CROSS (expect 401)"
+          test "$CROSS" = "401" || { echo "isolation failure: alice's password authenticated me's slot"; fail=1; }
+          jobs -p | xargs -r kill 2>/dev/null || true
+          test "$fail" = "0" || exit 1
+          echo "multi-slot smoke PASSED"
