@@ -75,14 +75,12 @@ new VM → `provision.sh` → `restore.sh`.
      Oracle's VCN is a *second* firewall; `ufw` alone is not enough.
 2. **DuckDNS**: free subdomain at [duckdns.org](https://www.duckdns.org) → add an
    **A record** pointing at the VM's public IP.
-3. **SSH in and provision:**
+3. **SSH in and run the one-line installer** (installs git, clones the repo,
+   then asks 3 questions — domain, owner password, optional settings repo):
 
    ```bash
    ssh ubuntu@<vm-ip>
-   sudo apt update && sudo apt install -y git
-   git clone https://github.com/vit-cerny/opencode-anywhere.git
-   cd opencode-anywhere
-   sudo OPENCODE_SERVER_PASSWORD='a-long-strong-password-for-me' ./provision.sh yourname.duckdns.org
+   curl -fsSL https://raw.githubusercontent.com/vit-cerny/opencode-anywhere/main/setup.sh | sudo bash
    ```
 
    This creates your first slot, **`me`**, at `https://me.yourname.duckdns.org`

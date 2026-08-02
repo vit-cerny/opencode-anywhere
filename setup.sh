@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
-# setup.sh - guided bootstrap for opencode-anywhere (run ON the fresh VM after
-# cloning the repo). Asks you the same questions the console would, then runs
-# provision.sh. Read-only discoverable: SETUP_* env vars skip the prompts.
+# setup.sh - guided one-time setup for opencode-anywhere.
 #
-#   ssh ubuntu@<vm-ip>
-#   git clone https://github.com/vit-cerny/opencode-anywhere.git && cd opencode-anywhere
-#   ./setup.sh
+# ONE LINE on a fresh VM (no git needed first):
+#   curl -fsSL https://raw.githubusercontent.com/vit-cerny/opencode-anywhere/main/setup.sh | sudo bash
+#
+# Or from an existing checkout:   sudo ./setup.sh
+#
+# Asks the same questions the console would (DuckDNS domain, owner password,
+# optional settings repo), then runs provision.sh. Read-only discoverable:
+# SETUP_* env vars skip the prompts.
 set -euo pipefail
 
-# Fail fast if not root-able (provision.sh needs sudo)
-[ "$(id -u)" -eq 0 ] || { echo "run as root: sudo ./setup.sh" >&2; exit 1; }
-[ -f ./provision.sh ] || { echo "ERROR: run from the cloned repo root (provision.sh not found)" >&2; exit 1; }
+[ "$(id -u)" -eq 0 ] || { echo "run as root: sudo ./setup.sh (or the curl one-liner)" >&2; exit 1; }
+
+# --- Self-bootstrap: working on a bare VM? clone ourselves first. ----------
+if [ ! -f ./provision.sh ]; then
+  echo "=> good to go: fetching opencode-anywhere (installs git)..."
+  apt-get update -qq >/dev/null
+  apt-get install -y -qq git >/dev/null
+  [ -d /opt/opencode-anywhere/.git ] || \
+    git clone --quiet https://github.com/vit-cerny/opencode-anywhere.git /opt/opencode-anywhere
+  chmod +x /opt/opencode-anywhere/*.sh   # belt-and-braces: filesystems/git may drop exec bits
+  cd /opt/opencode-anywhere
+  exec bash ./setup.sh
+fi
 
 echo "opencode-anywhere guided setup"
 echo "-------------------------------"

@@ -71,13 +71,11 @@ Time target: ~20-30 min once your account is approved (instant usually).
 
 22. On your PC terminal: `ssh ubuntu@<public-ip-address>` (the first connection
     asks to trust the new host → type `yes`).
-23. Now do — in one go:
+23. Now the whole install is **one line** (it installs git, clones the repo,
+    then asks you 3 questions):
 
 ```bash
-sudo apt update && sudo apt install -y git
-git clone https://github.com/vit-cerny/opencode-anywhere.git
-cd opencode-anywhere
-sudo ./setup.sh
+curl -fsSL https://raw.githubusercontent.com/vit-cerny/opencode-anywhere/main/setup.sh | sudo bash
 ```
 
 Answer the prompts: `<mybox>.duckdns.org`, a long owner password (12+), and

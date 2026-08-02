@@ -40,17 +40,18 @@ actual scripts in this repo (`provision.sh`, `add-slot.sh`, `backup.sh`,
 
 ## 3. Provision on the VM
 
-SSH in from your PC and run the one-line bootstrap:
+SSH in from your PC and run the **one-line installer** — it installs git,
+clones itself, and asks the questions interactively:
 
 ```bash
 ssh ubuntu@<vm-public-ip>
-sudo apt update && sudo apt install -y git
-git clone https://github.com/vit-cerny/opencode-anywhere.git
-cd opencode-anywhere
-sudo OPENCODE_SERVER_PASSWORD='<your-own-strong-pw-min-12-chars>' \
-  SETTINGS_REPO='https://github.com/<YOUR-NAME>/opencode-defaults' \
-  ./provision.sh <sub>.duckdns.org
+curl -fsSL https://raw.githubusercontent.com/vit-cerny/opencode-anywhere/main/setup.sh | sudo bash
 ```
+
+(Prefer typing the answers instead of prompts? Same one-liner works with env
+vars: prefix it with
+`SETUP_DOMAIN='<sub>.duckdns.org' SETUP_PASSWORD='<pw-min-12>' SETTINGS_REPO='https://github.com/<YOUR-NAME>/opencode-defaults' `
+or `SETUP_SKIP_REPO=1` to skip the settings repo.)
 
 That single script, idempotently:
 - installs pinned **Node**, **opencode-web**, **codex** and **claude** CLIs;
