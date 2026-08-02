@@ -108,7 +108,8 @@ foreach ($slotScript in @('add-slot.sh', 'remove-slot.sh', 'list-slots.sh')) {
 $addSlot = Get-Content -LiteralPath (Join-Path $repo 'add-slot.sh') -Raw
 foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDATE=1', 'ForceCommand internal-sftp', 'chmod 0600', '--hostname 127.0.0.1', 'caddy validate',
                     'mkdir -p "$HOME_DIR/.codex"', '.codex/config.toml', '[approval_policy]', 'mode = "off"', 'chmod 0700 "$HOME_DIR/.codex"',
-                    '"$HOME_DIR/.claude" "$HOME_DIR/.config/claude"', '.claude.json', '.config/claude/settings.json')) {
+                    'mkdir -p "$HOME_DIR/.claude"', ': > "$HOME_DIR/.claude.json"', 'settings.json', 'chmod 0700 "$HOME_DIR/.claude"',
+                    'chmod 0600 "$HOME_DIR/.claude.json" "$HOME_DIR/.claude/settings.json"')) {
   if ($addSlot -notmatch [regex]::Escape($must)) { Fail "add-slot.sh: hardening regression - missing '$must'" }
 }
 # 'admin off' is a Caddy GLOBAL option (base Caddyfile seeded by provision.sh

@@ -20,7 +20,7 @@ TARBALL="$BACKUP_DIR/opencode-$STAMP.tar.gz"
 # home + 0700 backup dir), but if you sync off-box, use an encrypted destination
 # (e.g. `rclone` with a `crypt:` remote) - never a plain object store.
 # Optional off-box sync: BACKUP_RCLONE_REMOTE=rclone-crypt-remote:backups backup.sh
-tar czf "$TARBALL" --ignore-failed-read -C "$HOME" .config/opencode .local/share/opencode
+tar czf "$TARBALL" --ignore-failed-read -C "$HOME" .config/opencode .local/share/opencode shared
 chmod 0600 "$TARBALL"
 
 # Optional off-box sync (best-effort; the box itself keeps the last 7 regardless).

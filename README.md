@@ -61,6 +61,9 @@ new VM → `provision.sh` → `restore.sh`.
 
 ## Deploy (20 minutes, one-time)
 
+> Full step-by-step: **[DEPLOY.md](DEPLOY.md)** · how files save/sync in realtime:
+> **[docs/FILES.md](docs/FILES.md)**.
+
 1. **Oracle**: sign up at [oracle.com/cloud/free](https://www.oracle.com/cloud/free/)
    (free account; card is for identity only). Console → *Create a VM instance* →
    **Ubuntu 22.04/24.04** → shape **VM.Standard.E2.1.Micro** (AMD) or

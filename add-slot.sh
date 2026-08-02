@@ -65,7 +65,7 @@ else
 fi
 
 # --- slot data dirs; config seeded from the shared template (user brings their own) ---
-mkdir -p "$HOME_DIR/.config/opencode" "$HOME_DIR/.agents/skills" "$HOME_DIR/.local/share/opencode"
+mkdir -p "$HOME_DIR/.config/opencode" "$HOME_DIR/.agents/skills" "$HOME_DIR/.local/share/opencode" "$HOME_DIR/shared"
 if [ -f /etc/opencode/templates/opencode.jsonc ] && [ ! -f "$HOME_DIR/.config/opencode/opencode.jsonc" ]; then
   sed "s|{{HOME}}|$HOME_DIR|g" /etc/opencode/templates/opencode.jsonc > "$HOME_DIR/.config/opencode/opencode.jsonc"
   sed "s|{{HOME}}|$HOME_DIR|g" /etc/opencode/templates/AGENTS.md > "$HOME_DIR/AGENTS.md"
