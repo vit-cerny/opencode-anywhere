@@ -1,0 +1,3 @@
+# Normalize line endings: shell scripts must stay LF (cloned and run on Linux servers).
+* text=auto
+*.sh text eol=lf

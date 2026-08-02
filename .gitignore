@@ -1,0 +1,11 @@
+# Secrets and local state - never commit these
+.env
+*.env
+!provision.sh
+backups/
+*.tar.gz
+
+# Dependencies and runtime artifacts
+node_modules/
+.opencode/
+.bak*

@@ -1,0 +1,111 @@
+{
+  // Vision strategy for non-vision models (e.g. deepseek): screenshots/images are
+  // captured by skills to PNG, then attached via opencode's `read` tool. Image
+  // UNDERSTANDING is delegated to the vision-assistant subagent below
+  // (openai/gpt-4o-mini, uses OPENAI_API_KEY set on the server).
+  "agent": {
+    "vision-assistant": {
+      "description": "Analyzes images, screenshots, diagrams, and video frames. Use whenever a task needs reading visual content - the default model may have no vision.",
+      "model": "openai/gpt-4o-mini",
+      "mode": "subagent",
+      "temperature": 0,
+      "permission": {
+        "read": "allow",
+        "edit": "deny",
+        "bash": "deny",
+        "webfetch": "allow",
+        "websearch": "allow"
+      }
+    }
+  },
+  "$schema": "https://opencode.ai/config.json",
+  // Server mode: opencode web listens on 127.0.0.1:4096 behind the Caddy HTTPS proxy.
+  // Sessions, projects, and MCP config live on the server, so every device sees the
+  // same state in realtime. Auth: OPENCODE_SERVER_PASSWORD / OPENCODE_SERVER_USERNAME.
+  // Loopback only - Caddy is the sole ingress (defense in depth behind the firewall).
+  "server": {
+    "port": 4096,
+    "hostname": "127.0.0.1"
+  },
+  // MCP servers (restart opencode after editing this file)
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@0.0.78"],
+      "enabled": true,
+      "timeout": 120000,
+      "environment": {
+        // Headless browser, no visible window
+        "PLAYWRIGHT_MCP_HEADLESS": "true"
+      }
+    },
+    // Official reference filesystem server, restricted to the service user's home
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "{{HOME}}"],
+      "enabled": true
+    },
+    // Persistent knowledge-graph memory for cross-session facts (keyless)
+    "memory": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-memory"],
+      "enabled": true,
+      "timeout": 30000
+    },
+    // Step-by-step reasoning / problem decomposition (keyless)
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true,
+      "timeout": 30000
+    },
+    // Up-to-date library/docs lookups via Context7 (keyless remote)
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp",
+      "enabled": true,
+      "timeout": 30000
+    },
+    // GitHub via GitHub Copilot's hosted MCP. DISABLED until GITHUB_PERSONAL_ACCESS_TOKEN
+    // is set (export GITHUB_PERSONAL_ACCESS_TOKEN=<token> on the server), then flip
+    // "enabled" to true and restart opencode. Token comes from the env var, never a file.
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "enabled": false,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:GITHUB_PERSONAL_ACCESS_TOKEN}"
+      },
+      "timeout": 30000
+    },
+    // Web search via Brave. DISABLED until BRAVE_API_KEY is set
+    // (export BRAVE_API_KEY=<key> on the server), then "enabled": true.
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "enabled": false,
+      "environment": {
+        "BRAVE_API_KEY": "{env:BRAVE_API_KEY}"
+      },
+      "timeout": 30000
+    },
+    // AI web search/extract via Tavily. DISABLED until TAVILY_API_KEY is set
+    // (export TAVILY_API_KEY=<key> on the server), then "enabled": true.
+    "tavily": {
+      "type": "local",
+      "command": ["npx", "-y", "tavily-mcp"],
+      "enabled": false,
+      "environment": {
+        "TAVILY_API_KEY": "{env:TAVILY_API_KEY}"
+      },
+      "timeout": 30000
+    }
+  },
+  // Security: block RCE-equivalent Playwright tools; require approval for arbitrary JS eval.
+  // Permission keys are the exact MCP tool names (server prefix: playwright_browser_*).
+  "permission": {
+    "playwright_browser_run_code_unsafe": "deny",
+    "playwright_browser_evaluate": "ask"
+  }
+}
