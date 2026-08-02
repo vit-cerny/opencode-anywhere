@@ -25,7 +25,7 @@ if (Get-Command ssh-keygen -ErrorAction SilentlyContinue) {
 if (Test-Path "$env:USERPROFILE\.ssh\id_ed25519.pub") {
   Write-Host "  Key exists (reusing it)."
 } else {
-  ssh-keygen -t ed25519 -N '""' -f "$env:USERPROFILE\.ssh\id_ed25519" -C "witek-ocicloud" | Out-Null
+  ssh-keygen -t ed25519 -N '""' -f "$env:USERPROFILE\.ssh\id_ed25519" -C "opencode-vm" | Out-Null
   Write-Host '  New ed25519 key generated (no passphrase).'
 }
 $pub = (Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub" -Raw).Trim()
