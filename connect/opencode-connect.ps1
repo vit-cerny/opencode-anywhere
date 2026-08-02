@@ -34,6 +34,7 @@ $Pairs = @(
   @{ Local = "$UProfile\.claude.json";                 Remote = '.claude.json' }
   @{ Local = "$UProfile\.config\claude";               Remote = '.config/claude' }
   @{ Local = "$UProfile\.local\share\claude-code";     Remote = '.local/share/claude-code' }
+  @{ Local = "$UProfile\shared";                        Remote = 'shared' }
 )
 
 function Test-SlotAuth {

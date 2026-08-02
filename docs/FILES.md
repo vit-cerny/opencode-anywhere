@@ -24,8 +24,9 @@ on-demand, and where work files live per slot.
   `~/.local/share/opencode`, `~/.local/state/opencode`, plus codex (`~/.codex`,
   `~/.config/codex`, `~/.local/share/codex`) and claude (`~/.claude`,
   `~/.claude.json`, `~/.config/claude`, `~/.local/share/claude-code`) state.
-- It does **not** sync `shared/` by design — `shared/` is work files, reach it
-  from any device via the same slot URL (or sftp directly).
+- Since the `shared/` work-files fix, it **also** syncs `~/shared` — the
+  sftp transfer includes the per-slot shared folder, so `connect push|pull`
+  moves your work files between devices too.
 
 ## Per-slot `shared/` (your work files)
 

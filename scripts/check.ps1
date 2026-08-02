@@ -76,6 +76,13 @@ foreach ($file in Get-RepoFiles) {
   }
 }
 
+# ---- 2b. Secret sweep: no tracked file may be named auth.json / *.env (a repo
+# clone could hide tokens in those names even when the values pattern misses).
+$envNameHits = Get-ChildItem -LiteralPath $repo -Recurse -File | Where-Object {
+  $_.FullName -notmatch '\\\.git\\' -and $_.Name -imatch '^(auth\.json|.*\.env)$'
+}
+foreach ($hit in $envNameHits) { Fail "secret sweep: forbidden filename tracked: $($hit.FullName)" }
+
 # ---- 3. Template hygiene ----
 if ($jsonc -notmatch '\{\{HOME\}\}') { Fail 'opencode.jsonc: {{HOME}} placeholder missing' }
 foreach ($file in Get-RepoFiles) {
@@ -108,10 +115,14 @@ foreach ($slotScript in @('add-slot.sh', 'remove-slot.sh', 'list-slots.sh')) {
 $addSlot = Get-Content -LiteralPath (Join-Path $repo 'add-slot.sh') -Raw
 foreach ($must in @('EnvironmentFile=/etc/opencode/', 'OPENCODE_DISABLE_AUTOUPDATE=1', 'ForceCommand internal-sftp', 'chmod 0600', '--hostname 127.0.0.1', 'caddy validate',
                     'mkdir -p "$HOME_DIR/.codex"', '.codex/config.toml', '[approval_policy]', 'mode = "off"', 'chmod 0700 "$HOME_DIR/.codex"',
-                    'mkdir -p "$HOME_DIR/.claude"', ': > "$HOME_DIR/.claude.json"', 'settings.json', 'chmod 0700 "$HOME_DIR/.claude"',
-                    'chmod 0600 "$HOME_DIR/.claude.json" "$HOME_DIR/.claude/settings.json"')) {
+                    'mkdir -p "$HOME_DIR/.claude"', ': > "$HOME_DIR/.claude.json"', '"$HOME_DIR/.claude/settings.json"',
+                    'chmod 0700 "$HOME_DIR/.claude"', 'chmod 0600 "$HOME_DIR/.claude.json"')) {
   if ($addSlot -notmatch [regex]::Escape($must)) { Fail "add-slot.sh: hardening regression - missing '$must'" }
 }
+# Negative: the WRONG claude path family (~/.config/claude, the old broken seed)
+# must never come back - the bare 'settings.json' substring below would pass.
+if ($addSlot -match '\.config/claude/settings\.json') { Fail 'add-slot.sh: wrong claude path re-introduced (.config/claude must NOT be used)' }
+if ($addSlot -match '"$HOME_DIR/.claude/settings.json" "$HOME_DIR/.config') { Fail 'add-slot.sh: claude config mixed into .config' }
 # 'admin off' is a Caddy GLOBAL option (base Caddyfile seeded by provision.sh
 # only when absent) — add-slot appends proxy-only vhosts and must NOT re-add it.
 $provision = Get-Content -LiteralPath (Join-Path $repo 'provision.sh') -Raw
@@ -123,7 +134,7 @@ if ($provision -notmatch '@anthropic-ai/claude-code') { Fail "provision.sh: must
 # ---- 4d. connect client must sync codex + claude state so slots stay whole ---
 foreach ($connect in @('connect/opencode-connect.sh', 'connect/opencode-connect.ps1')) {
   $c = Get-Content -LiteralPath (Join-Path $repo $connect) -Raw
-  foreach ($must in @('.codex', '.claude', '.local/share/claude-code')) {
+  foreach ($must in @('.codex', '.claude', '.local/share/claude-code', 'shared')) {
     if ($c -notmatch [regex]::Escape($must)) { Fail "${connect}: missing codex/claude PAIRS entry '$must'" }
   }
 }

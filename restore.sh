@@ -25,15 +25,22 @@ fi
 
 [ -f "$FILE" ] || { echo "ERROR: backup not found: $FILE" >&2; exit 1; }
 
-# Stop the service while overwriting live state (best-effort; service control needs root).
-RESTART=0
-if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet opencode-web 2>/dev/null; then
-  if systemctl stop opencode-web 2>/dev/null; then RESTART=1; else
-    echo "WARNING: could not stop opencode-web (run as root to stop/restart it)" >&2
-  fi
+# Stop the slot's own unit(s) while overwriting live state (best-effort; root
+# needed). Real units are named opencode-web-<slot> - stop every one whose
+# service User matches $USER (the never-existent literal "opencode-web" unit
+# would silently do nothing, then extract over a LIVE sqlite store).
+RESTART=()
+if command -v systemctl >/dev/null 2>&1; then
+  for UNIT in $(systemctl list-unit-files --type=service --no-legend 2>/dev/null | awk '/^opencode-web-/ {print $1}' | sed 's/\.service$//'); do
+    if systemctl show "$UNIT" -p User --no-pager 2>/dev/null | grep -q "User=$USER$"; then
+      if systemctl stop "$UNIT" 2>/dev/null; then RESTART+=("$UNIT"); else
+        echo "WARNING: could not stop $UNIT (run as root to stop/restart it)" >&2
+      fi
+    fi
+  done
 fi
 
 tar xzf "$FILE" -C "$HOME"
 echo "restored: $FILE"
 
-if [ "$RESTART" -eq 1 ]; then systemctl start opencode-web; fi
+for UNIT in "${RESTART[@]}"; do systemctl start "$UNIT"; done

@@ -167,6 +167,7 @@ User=$USER
 Group=$USER
 WorkingDirectory=$HOME_DIR
 EnvironmentFile=/etc/opencode/$SLOT.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/local/bin/opencode web --port $PORT --hostname 127.0.0.1
 Restart=always
 RestartSec=5

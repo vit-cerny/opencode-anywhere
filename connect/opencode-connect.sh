@@ -37,6 +37,7 @@ CLAUDE_CFG="$HOME/.claude"          # claude code state/auth
 CLAUDE_JSON="$HOME/.claude.json"    # claude code main config+auth
 CLAUDE_XDG="$HOME/.config/claude"   # claude settings.json template
 CLAUDE_DATA="$HOME/.local/share/claude-code" # claude session .jsonl history
+SHARED="$HOME/shared"            # per-slot shared folder (files that follow you)
 PAIRS=(
   "$CFG         :.config/opencode"
   "$SKILLS      :.agents/skills"
@@ -49,6 +50,7 @@ PAIRS=(
   "$CLAUDE_JSON :.claude.json"
   "$CLAUDE_XDG  :.config/claude"
   "$CLAUDE_DATA :.local/share/claude-code"
+  "$SHARED      :shared"
 )
 
 if [ "$CMD" = "info" ]; then

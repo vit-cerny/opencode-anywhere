@@ -15,12 +15,38 @@ chmod 0700 "$BACKUP_DIR"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 TARBALL="$BACKUP_DIR/opencode-$STAMP.tar.gz"
 
-# Backup contents are SENSITIVE: the archive includes ~/.local/share/opencode which
-# holds auth.json (your AI provider API keys). Keep backups on the box is fine (0600
-# home + 0700 backup dir), but if you sync off-box, use an encrypted destination
-# (e.g. `rclone` with a `crypt:` remote) - never a plain object store.
+# Backup contents are SENSITIVE: the archive includes auth.json files (live
+# provider API keys) AND opencode-*.env (slot passwords when run as root).
+# Keep backups on the box is fine (0600 home + 0700 backup dir) - if you sync
+# off-box, use an encrypted destination (e.g. `rclone` with a `crypt:` remote),
+# never a plain object store.
 # Optional off-box sync: BACKUP_RCLONE_REMOTE=rclone-crypt-remote:backups backup.sh
-tar czf "$TARBALL" --ignore-failed-read -C "$HOME" .config/opencode .local/share/opencode shared
+#
+# Include the ENTIRE slot (config + state + skills + chat/auth dirs) so a fresh
+# box can be rebuilt from the archive alone. Root mode additionally captures the
+# system files that recreate users/passwords/vhosts: per-slot env, slots.conf,
+# Caddyfile, sshd slot drop-in. Exit early (no write) if HOME is broken so we
+# never ship a read-only/partial tarball.
+if [ ! -d "$HOME/.config" ] && [ "$(id -u)" -ne 0 ]; then
+  echo "ERROR: \$HOME ($HOME) has no .config - nothing to back up" >&2; exit 1
+fi
+if [ "$(id -u)" -eq 0 ]; then
+  # Root mode: whole slot(s) + the system files that recreate users/vhosts
+  # (slots.conf, per-slot password envs, Caddyfile, sshd slot drop-in).
+  # Subshell + cd / so the SHELL expands the cl-* globs (GNU tar globs
+  # against the current dir, not against a -C dir).
+  ( cd / && tar czf "$TARBALL" --ignore-failed-read \
+      home/cl-*/.local/share/opencode home/cl-*/.local/state/opencode \
+      home/cl-*/.config/opencode home/cl-*/.agents/skills \
+      home/cl-*/.claude home/cl-*/.claude.json home/cl-*/.codex \
+      home/cl-*/AGENTS.md home/cl-*/shared \
+      etc/opencode/slots.conf etc/opencode/*.env \
+      etc/caddy/Caddyfile etc/ssh/sshd_config.d/99-opencode-slots.conf )
+else
+  tar czf "$TARBALL" --ignore-failed-read \
+    -C "$HOME" .config/opencode .local/share/opencode .local/state/opencode \
+                 .agents/skills .claude .claude.json .codex AGENTS.md shared
+fi
 chmod 0600 "$TARBALL"
 
 # Optional off-box sync (best-effort; the box itself keeps the last 7 regardless).
