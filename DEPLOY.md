@@ -114,9 +114,9 @@ sudo -u cl-<name> bash -c 'chown -R cl-<name>:cl-<name> ~/.ssh'
   user's work files — private to that slot, created by `add-slot.sh` and backed
   up with `backup.sh`. Store work files here.
 - Web UI edits save **live to the slot**. The `connect` client syncs opencode
-  state on demand (push/pull); it does **not** sync `shared/` — keep work files
-  in `shared/` and reach them from any device via the same URL, or clone them out
-  with sftp directly.
+  state **and** `~/shared/` on demand (push = import this machine into the slot,
+  pull = clone the slot down), so `connect` is how work files travel between
+  devices; you can also reach them from any browser via the slot URL or sftp.
 
 ## 6. Keep it alive forever
 
