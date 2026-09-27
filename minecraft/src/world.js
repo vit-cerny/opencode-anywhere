@@ -294,19 +294,22 @@ export function disposeMesh(scene, mesh) {
 }
 function meshFromGeometry(THREE, tex, g) {
   if (!g.idx.length) return null;
-  var atlas = tex.getAtlas(), nt = tex.tileCount();
+  var atlas = tex.getAtlas(), nt = tex.tileCount(), TS = tex.TILE;
   var nf = g.idx.length / 6;
   var pos = [], nor = [], uv = [], oidx = [], widx = [], count = 0;
-  var f, v, id, tile, wet;
+  var f, v, id, tile, wet, uu, vv;
   for (f = 0; f < nf; f++) {
     id = g.tiles[f * 2];
     wet = id === 10;
     tile = tex.tileIndex(id, faceName(FACES[g.tiles[f * 2 + 1]].n[1]));
     var base = count * 4;
     for (v = 0; v < 4; v++) {
+      // ponytail: half-texel inset keeps edge samples inside the tile.
+      uu = (tile * TS + 0.5 + g.uv[(f * 4 + v) * 2] * (TS - 1)) / (nt * TS);
+      vv = (0.5 + g.uv[(f * 4 + v) * 2 + 1] * (TS - 1)) / TS;
       pos.push(g.pos[(f * 4 + v) * 3], g.pos[(f * 4 + v) * 3 + 1], g.pos[(f * 4 + v) * 3 + 2]);
       nor.push(g.nor[(f * 4 + v) * 3], g.nor[(f * 4 + v) * 3 + 1], g.nor[(f * 4 + v) * 3 + 2]);
-      uv.push((tile + g.uv[(f * 4 + v) * 2]) / nt, g.uv[(f * 4 + v) * 2 + 1]);
+      uv.push(uu, vv);
     }
     if (wet) widx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     else oidx.push(base, base + 1, base + 2, base, base + 2, base + 3);

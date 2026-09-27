@@ -1,5 +1,6 @@
 import * as THREE from "three";
 const S = 16;
+export const TILE = S;
 const cache = new Map();
 function rnd(x, y, s) {
   let h = (x * 374761393 + y * 668265263 + s * 974634) | 0;
