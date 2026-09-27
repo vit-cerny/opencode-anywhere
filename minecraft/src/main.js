@@ -89,7 +89,7 @@ function camPos(camera) {
   return [p.x, p.y, p.z];
 }
 
-function bindEdit(world, scene, camera, renderer) {
+function bindEdit(world, scene, camera, renderer, player) {
   var el = renderer.domElement;
   el.addEventListener("contextmenu", function (e) {
     e.preventDefault();
@@ -141,7 +141,7 @@ export function boot() {
   attachControls(player, renderer.domElement, camera);
   initUI();
   bindResize(renderer, camera);
-  bindEdit(world, scene, camera, renderer);
+  bindEdit(world, scene, camera, renderer, player);
   var clock = new THREE.Clock();
   var acc = 0;
   var dayT = 0;
