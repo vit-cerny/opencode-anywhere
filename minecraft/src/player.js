@@ -73,6 +73,13 @@ export function hitsWorld(world, px, py, pz) {
   return false;
 }
 
+// ponytail: placement guard lives with the box dims it checks.
+export function occupies(p, bx, by, bz) {
+  return bx + 1 > p.pos.x - HALF && bx < p.pos.x + HALF &&
+    by + 1 > p.pos.y && by < p.pos.y + HEIGHT &&
+    bz + 1 > p.pos.z - HALF && bz < p.pos.z + HALF;
+}
+
 function moveAxis(world, p, ax, amt) {
   if (!amt) return;
   const n = { x: p.pos.x, y: p.pos.y, z: p.pos.z };

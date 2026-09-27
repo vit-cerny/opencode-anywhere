@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { createWorld, setBlock, raycast, streamChunks } from "./world.js";
-import { createPlayer, updatePlayer, attachControls } from "./player.js";
+import { createPlayer, updatePlayer, attachControls, occupies } from "./player.js";
 import { initUI, getSelected } from "./ui.js";
 import { loadInto, saveWorld } from "./save.js";
 
@@ -101,7 +101,9 @@ function bindEdit(world, scene, camera, renderer) {
     if (e.button === 0) {
       setBlock(world, hit.x, hit.y, hit.z, 0, true);
     } else if (e.button === 2) {
-      setBlock(world, hit.x + hit.nx, hit.y + hit.ny, hit.z + hit.nz, getSelected(), true);
+      var tx = hit.x + hit.nx, ty = hit.y + hit.ny, tz = hit.z + hit.nz;
+      // ponytail: never entomb the player; vanilla blocks self-placement too.
+      if (!occupies(player, tx, ty, tz)) setBlock(world, tx, ty, tz, getSelected(), true);
     } else {
       return;
     }
