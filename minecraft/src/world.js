@@ -292,12 +292,19 @@ export function disposeMesh(scene, mesh) {
     for (var i = 0; i < ms.length; i++) { if (ms[i]) ms[i].dispose(); }
   } catch (e) {}
 }
+// ponytail: UV math lives here (Node-safe) so tests exercise the real path.
+// Must match textures.js layout: S=16px tiles, 30 in one row (tileCount).
+var UV_TS = 16, UV_NT = 30;
+export function tileUV(tile, u, v) {
+  return [(tile * UV_TS + 0.5 + u * (UV_TS - 1)) / (UV_NT * UV_TS),
+    (0.5 + v * (UV_TS - 1)) / UV_TS];
+}
 function meshFromGeometry(THREE, tex, g) {
   if (!g.idx.length) return null;
-  var atlas = tex.getAtlas(), nt = tex.tileCount(), TS = tex.TILE;
+  var atlas = tex.getAtlas();
   var nf = g.idx.length / 6;
   var pos = [], nor = [], uv = [], oidx = [], widx = [], count = 0;
-  var f, v, id, tile, wet, uu, vv;
+  var f, v, id, tile, wet, t;
   for (f = 0; f < nf; f++) {
     id = g.tiles[f * 2];
     wet = id === 10;
@@ -305,11 +312,10 @@ function meshFromGeometry(THREE, tex, g) {
     var base = count * 4;
     for (v = 0; v < 4; v++) {
       // ponytail: half-texel inset keeps edge samples inside the tile.
-      uu = (tile * TS + 0.5 + g.uv[(f * 4 + v) * 2] * (TS - 1)) / (nt * TS);
-      vv = (0.5 + g.uv[(f * 4 + v) * 2 + 1] * (TS - 1)) / TS;
+      t = tileUV(tile, g.uv[(f * 4 + v) * 2], g.uv[(f * 4 + v) * 2 + 1]);
       pos.push(g.pos[(f * 4 + v) * 3], g.pos[(f * 4 + v) * 3 + 1], g.pos[(f * 4 + v) * 3 + 2]);
       nor.push(g.nor[(f * 4 + v) * 3], g.nor[(f * 4 + v) * 3 + 1], g.nor[(f * 4 + v) * 3 + 2]);
-      uv.push(uu, vv);
+      uv.push(t[0], t[1]);
     }
     if (wet) widx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     else oidx.push(base, base + 1, base + 2, base, base + 2, base + 3);
