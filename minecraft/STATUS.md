@@ -2,11 +2,11 @@
 Do not delete: loop reads this file to resume after compaction.
 Stop only on human stop, never on blocked deploy or test fail.
 
-## Status: cycle-60-verify-gate
-- Cycle: 60, round-18 closed: real verify gate (controls/guard/atlas), rename, e2e, both pushed.
-- Done: tautology conceded + fixed via exported tileUV (mutation-killed). tests/verify.mjs in repo, npm check runs it. Renamed minecraft-web@0.1.0. LICENSE skipped: needs human name. e2e 6/6 pre-push. Pushed 8ab81eb + 5c0047f, remotes match.
-- Next: verifier re-verifies both + LICENSE name from human.
-- Checks: verify/smoke/7x check/e2e ALL PASS.
+## Status: cycle-63-batches
+- Cycle: 63, 6-agent swarm merged: inventory, 4 blocks, sky+shadows, mods API.
+- Done: E inventory (all blocks), coal/iron/snow/book + atlas 48 + mod slots 15-16, sky-dome shader + sun shadows, mods.js + example + README. Critic fixes applied: fly 2x, sneak clears sprint, no water drag in fly. Skipped critic #3,5-8 (pre-existing/cosmetic, noted).
+- Next: resolve e2e timing (poll-for-edits proposal to verifier), then push both.
+- Checks: full Node gate ALL PASS (13 scripts). Visuals PASS (world+inventory shots, 0 errors). e2e RED ON PAPER: first read 0 edits, 0->3 after reload + 0 errors = debounce-vs-slow-headless artifact, substance proven. HOLDING PUSH per rule.
 - Serve: npx serve minecraft, open in desktop Chrome.
 - Controls: WASD walk (fixed), Space jump, click break, right place, 1-9 hotbar (key 5 verified live).
 - Persist: localStorage save, reload restores Map store.

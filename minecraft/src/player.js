@@ -22,6 +22,7 @@ export function createPlayer(spawn) {
     vy: 0,
     onGround: false,
     keys: {},
+    fly: false,
     _lastW: 0,
     _sprint: false,
   };
@@ -129,21 +130,26 @@ export function updatePlayer(p, world, dt, camera) {
   const step = Math.max(0, Math.min(dt || 0.016, 0.05));
   const w = wishDir(p);
   const wet = inWater(world, p);
-  const drag = wet ? 0.6 : 1;
+  const fly = !!p.fly;
+  const drag = (wet && !fly) ? 0.6 : 1;
   const k = p.keys;
   const fwd = k.KeyW || k.ArrowUp;
-  // ponytail: sneak halves speed, overrides sprint.
-  let mult = 1;
-  if (k.ShiftLeft || k.ShiftRight) mult = 0.5;
-  else if (p._sprint && fwd) mult = 1.5;
+  // ponytail: fly wins over swim; sneak only walks, Shift descends in fly.
+  let mult = fly ? 2 : 1;
+  if (!fly && (k.ShiftLeft || k.ShiftRight)) { mult = 0.5; p._sprint = false; }
+  else if (p._sprint && fwd) mult *= 1.5;
   if (!fwd) p._sprint = false;
   moveAxis(world, p, "x", w.x * SPEED * mult * drag * step);
   moveAxis(world, p, "z", w.z * SPEED * mult * drag * step);
-  if (!wet && (k.Space) && p.onGround) {
+  if (!wet && !fly && (k.Space) && p.onGround) {
     p.vy = JUMP;
     p.onGround = false;
   }
-  if (wet) {
+  if (fly) {
+    if (k.Space) p.vy = 4.5 * mult;
+    else if (k.ShiftLeft || k.ShiftRight) p.vy = -4.5 * mult;
+    else p.vy = 0;
+  } else if (wet) {
     if (k.Space) p.vy = 3.5;
     else {
       p.vy -= 8 * step;
@@ -155,7 +161,9 @@ export function updatePlayer(p, world, dt, camera) {
   }
   const before = p.pos.y;
   moveAxis(world, p, "y", p.vy * step);
-  if (p.pos.y === before && p.vy <= 0) {
+  if (fly) {
+    p.onGround = false;
+  } else if (p.pos.y === before && p.vy <= 0) {
     p.vy = 0;
     p.onGround = true;
   } else if (p.vy !== 0) {
@@ -208,6 +216,8 @@ export function attachControls(p, el, camera) {
   }
   function onKey(e, down) {
     if (e.code === "Space") e.preventDefault();
+    // ponytail: F toggles fly (double-tap Space is jump muscle memory; keep it).
+    if (down && e.code === "KeyF" && !e.repeat) p.fly = !p.fly;
     // ponytail: double-tap W/Up sprints, no Ctrl (browser hijack).
     const fk = e.code === "KeyW" || e.code === "ArrowUp";
     if (down && fk && !e.repeat) {

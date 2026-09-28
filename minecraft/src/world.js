@@ -17,7 +17,7 @@ export function getBlock(w, x, y, z) {
 }
 export function setBlock(w, x, y, z, id, edit) {
   if (!w || !isInt(x) || !isInt(y) || !isInt(z)) return false;
-  if (!isInt(id) || id < 0 || id > 10) return false;
+  if (!isInt(id) || id < 0 || id > 16) return false;
   var k = key(x, y, z);
   if (id === 0) w.blocks.delete(k);
   else w.blocks.set(k, id);
@@ -294,7 +294,7 @@ export function disposeMesh(scene, mesh) {
 }
 // ponytail: UV math lives here (Node-safe) so tests exercise the real path.
 // Must match textures.js layout: S=16px tiles, 30 in one row (tileCount).
-var UV_TS = 16, UV_NT = 30;
+var UV_TS = 16, UV_NT = 48;
 export function tileUV(tile, u, v) {
   return [(tile * UV_TS + 0.5 + u * (UV_TS - 1)) / (UV_NT * UV_TS),
     (0.5 + v * (UV_TS - 1)) / UV_TS];

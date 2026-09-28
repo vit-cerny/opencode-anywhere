@@ -52,16 +52,18 @@ assert.equal(p.pos.z, zx, "trapped without guard");
 assert.ok(BLOCKS[10] === "water" && isSolid(10) === false, "water def");
 console.log("verify guard PASS");
 
-// --- atlas: tileUV (the real code path) keeps samples inside tiles 0/16/29 ---
-[0, 16, 29].forEach(function (tile) {
+// --- atlas: tileUV (the real code path) keeps samples inside tiles ---
+// ponytail: ATW tracks the 48-tile atlas (16 ids x 3 faces, see tileCount).
+var ATW = 48 * 16;
+[0, 16, 47].forEach(function (tile) {
   [0, 1].forEach(function (u) {
     var t = tileUV(tile, u, 0);
-    var px = t[0] * 480;
+    var px = t[0] * ATW;
     assert.ok(Math.abs((px % 1) - 0.5) < 1e-6, "tile " + tile + " u=" + u + " inside, got " + px);
   });
   var tv = tileUV(tile, 0, 1);
   assert.ok(tv[1] * 16 === 15.5, "v=1 texel center, got " + tv[1] * 16);
 });
-assert.equal(tileUV(29, 1, 0)[0] * 480, 479.5, "last tile inside atlas");
+assert.equal(tileUV(47, 1, 0)[0] * ATW, 767.5, "last tile inside atlas");
 console.log("verify atlas PASS");
 console.log("verify ok");

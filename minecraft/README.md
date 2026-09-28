@@ -30,3 +30,15 @@ Open the printed URL in desktop Chrome, click the landscape to capture the mouse
 - Day/night cycle (5 min), drifting clouds, swim physics
 - Saves seed + player edits to localStorage
 - Checks: `npm run check` (node --check on all sources + smoke test)
+
+## Mods
+
+Enable: `import "./mods/example.js"` once before boot.
+
+```js
+defineMod({ id: 15, name: "glow", paint(ctx, S) {} });
+```
+
+- Ids 15-16 reserved for mods (defineMod throws otherwise).
+- `paint(ctx, S)`: ctx is a 2d context pre-translated to a
+  16x16 tile, S = 16. Paint within 0..S.

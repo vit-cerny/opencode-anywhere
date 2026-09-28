@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { registry } from "./mods.js";
 const S = 16;
 export const TILE = S;
 const cache = new Map();
@@ -48,12 +49,16 @@ function draw(id, face, ctx) {
         c = (x === 0 || y === 0 || x === 15 || y === 15) ? shade([200, 220, 230], v) : shade([225, 240, 245], v);
       }
       else if (id === 10) c = shade([60, 120, 200], v);
+      else if (id === 11) c = (v < 0.2) ? shade([20, 20, 20], v) : shade([128, 128, 128], v);
+      else if (id === 12) c = (v < 0.2) ? shade([200, 120, 60], v) : shade([128, 128, 128], v);
+      else if (id === 13) c = shade([235, 240, 245], v);
+      else if (id === 14) c = (y % 4 === 3) ? shade([90, 60, 35], v) : shade([140, 95, 55], v);
       px(ctx, x, y, c);
     }
   }
 }
 export function faceOf(id, ny) {
-  if (!Number.isInteger(id) || id < 1 || id > 10) return "side";
+  if (!Number.isInteger(id) || id < 1 || id > 16) return "side";
   if (ny > 0) return "top";
   if (ny < 0) return "bottom";
   return "side";
@@ -63,7 +68,7 @@ function normFace(face) {
   return "side";
 }
 function normId(id) {
-  if (id >= 1 && id <= 10) return id;
+  if (id >= 1 && id <= 16) return id;
   return 3;
 }
 export function makeTexture(id, face) {
@@ -83,9 +88,9 @@ export function makeTexture(id, face) {
   return tx;
 }
 const FACES3 = ["top", "side", "bottom"];
-export function tileCount() { return 30; }
+export function tileCount() { return 48; }
 export function tileIndex(id, face) {
-  if (!Number.isInteger(id) || id < 1 || id > 10) id = 3;
+  if (!Number.isInteger(id) || id < 1 || id > 16) id = 3;
   var f = FACES3.indexOf(face);
   if (f < 0) f = 1;
   return (id - 1) * 3 + f;
@@ -97,12 +102,23 @@ export function getAtlas() {
   cv.width = S * tileCount();
   cv.height = S;
   var ctx = cv.getContext("2d");
-  var id, f;
-  for (id = 1; id <= 10; id++) {
+  var id, f, slot, mod;
+  for (id = 1; id <= 14; id++) {
     for (f = 0; f < 3; f++) {
       ctx.save();
       ctx.translate(((id - 1) * 3 + f) * S, 0);
       draw(id, FACES3[f], ctx);
+      ctx.restore();
+    }
+  }
+  // ponytail: slots defer to mods, gray when empty.
+  for (slot of [15, 16]) {
+    mod = registry.find(function (m) { return m.id === slot; });
+    for (f = 0; f < 3; f++) {
+      ctx.save();
+      ctx.translate(((slot - 1) * 3 + f) * S, 0);
+      if (mod && typeof mod.paint === "function") mod.paint(ctx, S);
+      else { ctx.fillStyle = "#888"; ctx.fillRect(0, 0, S, S); }
       ctx.restore();
     }
   }

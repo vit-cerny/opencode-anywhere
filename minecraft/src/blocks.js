@@ -10,6 +10,10 @@ export const PLANK = 7;
 export const BRICK = 8;
 export const GLASS = 9;
 export const WATER = 10;
+export const COAL = 11;
+export const IRON = 12;
+export const SNOW = 13;
+export const BOOK = 14;
 export const BLOCKS = {
   [AIR]: "air",
   [GRASS]: "grass",
@@ -21,7 +25,11 @@ export const BLOCKS = {
   [PLANK]: "plank",
   [BRICK]: "brick",
   [GLASS]: "glass",
-  [WATER]: "water"
+  [WATER]: "water",
+  [COAL]: "coal",
+  [IRON]: "iron",
+  [SNOW]: "snow",
+  [BOOK]: "book"
 };
 export function isSolid(id) {
   return id !== AIR && id !== WATER;

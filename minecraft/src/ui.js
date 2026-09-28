@@ -48,6 +48,38 @@ function helpEl() {
   const d = doc();
   return d ? d.getElementById("help") : null;
 }
+function invIds() {
+  return Object.keys(BLOCKS).map(Number).filter((n) => n !== 0);
+}
+function invEl() {
+  const d = doc();
+  return d ? d.getElementById("inv") : null;
+}
+function invPick(n, src) {
+  const d = doc();
+  if (!d || !invIds().includes(Number(n))) return;
+  selected = Number(n);
+  paint();
+  d.dispatchEvent(new CustomEvent("uipick", { detail: selected }));
+  if (src && src.blur) src.blur();
+}
+function toggleInv() {
+  const el = invEl();
+  if (el) el.hidden = !el.hidden;
+}
+function buildInv() {
+  const d = doc();
+  const el = invEl();
+  if (!d || !el || el.dataset.built) return;
+  for (const id of invIds()) {
+    const b = d.createElement("button");
+    b.dataset.i = String(id);
+    b.textContent = id + ":" + (BLOCKS[id] || id);
+    b.addEventListener("click", () => invPick(id, b));
+    el.appendChild(b);
+  }
+  el.dataset.built = "true";
+}
 export function toggleHelp() {
   const h = helpEl();
   if (h) h.hidden = !h.hidden;
@@ -64,9 +96,11 @@ export function initUI() {
   const d = doc();
   if (!d) return null;
   paint();
+  buildInv();
   d.addEventListener("keydown", (e) => {
     if (e.key >= "1" && e.key <= "9") pick(Number(e.key));
     if (e.key === "h" || e.key === "H") toggleHelp();
+    if (e.key === "e" || e.key === "E") toggleInv();
   });
   d.addEventListener("wheel", (e) => {
     const i = IDS.indexOf(selected);

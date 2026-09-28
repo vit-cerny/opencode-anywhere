@@ -27,3 +27,11 @@ body{font:14px/1.4 monospace}
 #help{position:fixed;right:8px;top:8px;z-index:10;max-width:220px}
 #help{background:rgba(0,0,0,.5);padding:8px;font-size:12px}
 #help[hidden]{display:none}
+#inv{position:fixed;left:50%;bottom:72px;z-index:20}
+#inv{transform:translateX(-50%);display:grid}
+#inv{grid-template-columns:repeat(4,64px);gap:4px}
+#inv{background:rgba(0,0,0,.7);padding:8px}
+#inv[hidden]{display:none}
+#inv button{background:rgba(0,0,0,.5);color:#fff}
+#inv button{border:2px solid #555;font:11px/1.4 monospace}
+#inv button{padding:8px 4px;pointer-events:auto;cursor:pointer}
