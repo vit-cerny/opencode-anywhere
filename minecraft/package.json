@@ -1,10 +1,10 @@
 {
-  "name": "mc-3js-stub",
-  "version": "0.0.1",
+  "name": "minecraft-web",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "npx serve .",
     "smoke": "node tests/smoke.mjs",
-    "check": "node --check src/main.js && node --check src/world.js && node --check src/player.js && node --check src/blocks.js && node --check src/textures.js && node --check src/ui.js && node --check src/save.js && node tests/smoke.mjs"
+    "check": "node --check src/main.js && node --check src/world.js && node --check src/player.js && node --check src/blocks.js && node --check src/textures.js && node --check src/ui.js && node --check src/save.js && node tests/smoke.mjs && node tests/verify.mjs"
   }
 }
